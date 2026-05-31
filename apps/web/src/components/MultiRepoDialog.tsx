@@ -15,6 +15,7 @@ import { readEnvironmentApi } from "../environmentApi";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { Popover, PopoverPopup, PopoverTrigger } from "./ui/popover";
 
 interface MultiRepoDialogProps {
   environmentId: EnvironmentId;
@@ -143,26 +144,33 @@ export function MultiRepoDialog({
   };
 
   return (
-    <div className="relative">
-      <Button
-        variant="ghost"
-        size="xs"
-        className="font-medium"
-        aria-label="Multi-repo session"
-        onClick={() => {
-          const next = !open;
-          setOpen(next);
-          if (next && repos.length === 0) {
-            void discover();
-          }
-        }}
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next && repos.length === 0) {
+          void discover();
+        }
+      }}
+    >
+      <PopoverTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="xs"
+            className="font-medium"
+            aria-label="Multi-repo session"
+          />
+        }
       >
         <FoldersIcon className="size-3" />
         Multi-repo
-      </Button>
+      </PopoverTrigger>
 
-      {open ? (
-        <div className="absolute bottom-full left-0 z-50 mb-2 w-96 rounded-lg border border-border bg-popover p-3 shadow-lg">
+      {/* Base UI Popover handles outside-click + Escape dismissal (matches the
+          branch / env-mode selectors). Opens upward — the trigger sits in the
+          composer footer at the bottom of the viewport. */}
+      <PopoverPopup side="top" align="start" className="w-96">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-medium">Multi-repo session</span>
             <Button variant="ghost" size="sm" onClick={() => void discover()}>
@@ -260,8 +268,7 @@ export function MultiRepoDialog({
               {inSession.size > 0 ? "Update session" : "Create worktrees"}
             </Button>
           </div>
-        </div>
-      ) : null}
-    </div>
+      </PopoverPopup>
+    </Popover>
   );
 }
