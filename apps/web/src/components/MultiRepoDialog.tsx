@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { scopeThreadRef } from "@t3tools/client-runtime";
 import type {
   EnvironmentId,
   ProjectGitRepo,
@@ -8,6 +9,7 @@ import type {
   ThreadId,
 } from "@t3tools/contracts";
 
+import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
 import { readEnvironmentApi } from "../environmentApi";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -18,19 +20,23 @@ interface MultiRepoDialogProps {
   projectId: ProjectId;
   threadId: ThreadId;
   workspaceRoot: string;
+  draftId?: DraftId;
 }
 
 /**
  * Minimal multi-repo control: discover repos under the project root, pick which
- * to include, then create one git worktree per repo (server sets the thread's
- * worktreePath to the shared parent so the agent sees them all).
+ * to include, then create one git worktree per repo. The resulting parent path
+ * is written onto the (draft) thread as its worktreePath so that — once started —
+ * the agent launches with cwd = parent and sees every repo.
  */
 export function MultiRepoDialog({
   environmentId,
   projectId,
   threadId,
   workspaceRoot,
+  draftId,
 }: MultiRepoDialogProps) {
+  const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
   const [open, setOpen] = useState(false);
   const [repos, setRepos] = useState<readonly ProjectGitRepo[]>([]);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -87,6 +93,13 @@ export function MultiRepoDialog({
         repos: chosen,
       });
       setCreated(result.repos);
+      // Point the (draft) thread at the shared parent so, once started, the agent
+      // runs with cwd = parentPath and sees every repo (resolveThreadWorkspaceCwd).
+      setDraftThreadContext(draftId ?? scopeThreadRef(environmentId, threadId), {
+        branch,
+        worktreePath: result.parentPath,
+        envMode: "worktree",
+      });
       setStatus(`Created ${result.repos.length} worktree(s) under ${result.parentPath}.`);
     } catch (error) {
       setStatus(`Worktree creation failed: ${String(error)}`);

@@ -296,6 +296,7 @@ export const BranchToolbar = memo(function BranchToolbar({
           projectId={activeProjectId}
           threadId={threadId}
           workspaceRoot={activeProject.cwd}
+          {...(draftId ? { draftId } : {})}
         />
       ) : null}
     </div>
