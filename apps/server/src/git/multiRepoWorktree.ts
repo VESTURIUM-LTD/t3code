@@ -1,3 +1,6 @@
+// @effect-diagnostics nodeBuiltinImport:off
+import { existsSync } from "node:fs";
+
 import * as Effect from "effect/Effect";
 
 import type { ProjectGitRepo, ProjectRepoWorktree, ThreadMultiRepoWorktree } from "@t3tools/contracts";
@@ -35,6 +38,18 @@ export const createMultiRepoWorktrees = Effect.fn("createMultiRepoWorktrees")(fu
 
   const created: ProjectRepoWorktree[] = [];
   for (const entry of layout) {
+    // Idempotent: if this repo's worktree already exists (re-click / retry on the
+    // same thread+branch), reuse it instead of re-running `git worktree add -b`,
+    // which would fail with "a branch named '<branch>' already exists".
+    if (existsSync(entry.worktreePath)) {
+      created.push({
+        repoId: entry.repoId,
+        repoRelativePath: entry.repoRelativePath,
+        sourceRootPath: entry.sourceRootPath,
+        worktreePath: entry.worktreePath,
+      });
+      continue;
+    }
     const result = yield* gitWorkflow.createWorktree({
       cwd: entry.sourceRootPath,
       refName: input.baseBranch ?? "HEAD",
