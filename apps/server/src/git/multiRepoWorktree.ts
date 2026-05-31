@@ -35,9 +35,14 @@ export const createMultiRepoWorktrees = Effect.fn("createMultiRepoWorktrees")(fu
     branch: input.branch,
   });
   const layout = buildRepoWorktreeLayout({ parentPath, repos });
+  // The project-root worktree IS the session base dir (worktreePath === parentPath);
+  // create it first so the nested sub-repo worktrees land inside it.
+  const ordered = [...layout].sort((a, b) =>
+    a.worktreePath === parentPath ? -1 : b.worktreePath === parentPath ? 1 : 0,
+  );
 
   const created: ProjectRepoWorktree[] = [];
-  for (const entry of layout) {
+  for (const entry of ordered) {
     // Idempotent: if this repo's worktree already exists (re-click / retry on the
     // same thread+branch), reuse it instead of re-running `git worktree add -b`,
     // which would fail with "a branch named '<branch>' already exists".

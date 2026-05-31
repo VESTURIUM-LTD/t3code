@@ -45,6 +45,7 @@ export function MultiRepoDialog({
   const [status, setStatus] = useState("");
   const [created, setCreated] = useState<readonly ProjectRepoWorktree[]>([]);
   const [inSession, setInSession] = useState<ReadonlySet<string>>(new Set());
+  const [rootRepo, setRootRepo] = useState<ProjectGitRepo | null>(null);
 
   const discover = async () => {
     const api = readEnvironmentApi(environmentId);
@@ -60,6 +61,9 @@ export function MultiRepoDialog({
       const nested = result.repos.filter((repo) => repo.relativePath !== ".");
       const list = nested.length > 0 ? nested : result.repos;
       const existing = new Set(result.existingRepoIds);
+      // The project root is always included as the session base (skills + CLAUDE.md
+      // + .mcp.json auto-load there) — kept out of the pickable list.
+      setRootRepo(result.repos.find((repo) => repo.relativePath === ".") ?? null);
       setRepos(list);
       setInSession(existing);
       // Pre-select repos already in this session; a fresh session starts with none
@@ -95,12 +99,15 @@ export function MultiRepoDialog({
       setStatus("Multi-repo API unavailable in this environment.");
       return;
     }
-    const chosen = repos.filter((repo) => selected.has(repo.id));
-    if (chosen.length === 0) {
-      setStatus("Select at least one repository.");
+    const chosenSubs = repos.filter((repo) => selected.has(repo.id));
+    if (chosenSubs.length === 0) {
+      setStatus("Select at least one repository to include.");
       return;
     }
-    setStatus(`Creating ${chosen.length} worktree(s)…`);
+    // Always include the project root as the session base (auto-loads skills,
+    // CLAUDE.md, .mcp.json) alongside the selected sub-repos.
+    const chosen = rootRepo ? [rootRepo, ...chosenSubs] : chosenSubs;
+    setStatus(`Creating ${chosenSubs.length} worktree(s)…`);
     try {
       const result = await api.vcs.createMultiRepoWorktree({
         threadId,
@@ -108,7 +115,7 @@ export function MultiRepoDialog({
         baseBranch: null,
         repos: chosen,
       });
-      setCreated(result.repos);
+      setCreated(result.repos.filter((worktree) => worktree.repoRelativePath !== "."));
       setInSession((prev) => new Set([...prev, ...chosen.map((repo) => repo.id)]));
       // Point the (draft) thread at the shared parent so, once started, the agent
       // runs with cwd = parentPath and sees every repo (resolveThreadWorkspaceCwd).
@@ -117,7 +124,9 @@ export function MultiRepoDialog({
         worktreePath: result.parentPath,
         envMode: "worktree",
       });
-      setStatus(`Created ${result.repos.length} worktree(s) under ${result.parentPath}.`);
+      setStatus(
+        `Ready: ${chosenSubs.length} repo worktree(s) + project root, under ${result.parentPath}.`,
+      );
     } catch (error) {
       setStatus(`Worktree creation failed: ${String(error)}`);
     }
@@ -162,6 +171,12 @@ export function MultiRepoDialog({
 
           <div className="mt-3 space-y-1.5">
             <Label>Repositories</Label>
+            {rootRepo ? (
+              <p className="rounded bg-muted/50 px-2 py-1 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Project root</span> is always the
+                session base — your skills, CLAUDE.md &amp; MCP config load automatically.
+              </p>
+            ) : null}
             {repos.length === 0 ? (
               <p className="text-sm text-muted-foreground">No repositories discovered yet.</p>
             ) : (

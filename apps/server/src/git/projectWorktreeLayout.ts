@@ -10,14 +10,7 @@ function sanitizeSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "repo";
 }
 
-function repoChildName(relativePath: string): string {
-  if (relativePath === ".") {
-    return "root";
-  }
-  return relativePath.split("/").map(sanitizeSegment).join("__");
-}
-
-/** A synthetic parent dir holding one worktree per repo: <worktreesDir>/multi-repo/<thread>/<branch>/ */
+/** The session base dir holding the multi-repo worktrees: <worktreesDir>/multi-repo/<thread>/<branch>/ */
 export function buildSyntheticWorktreeParent(input: {
   worktreesDir: string;
   threadId?: string;
@@ -28,6 +21,12 @@ export function buildSyntheticWorktreeParent(input: {
   return path.join(input.worktreesDir, "multi-repo", threadSegment, branchSegment);
 }
 
+/**
+ * Lays out worktrees mirroring the real project structure:
+ * - the project root (relativePath ".") becomes the session base dir itself, so
+ *   its .claude/skills + CLAUDE.md + .mcp.json auto-load (the agent runs "at root").
+ * - every other repo is a worktree at its real relative path inside the base.
+ */
 export function buildRepoWorktreeLayout(input: {
   parentPath: string;
   repos: ReadonlyArray<ProjectGitRepo>;
@@ -36,6 +35,7 @@ export function buildRepoWorktreeLayout(input: {
     repoId: repo.id,
     repoRelativePath: repo.relativePath,
     sourceRootPath: repo.rootPath,
-    worktreePath: path.join(input.parentPath, repoChildName(repo.relativePath)),
+    worktreePath:
+      repo.relativePath === "." ? input.parentPath : path.join(input.parentPath, repo.relativePath),
   }));
 }
