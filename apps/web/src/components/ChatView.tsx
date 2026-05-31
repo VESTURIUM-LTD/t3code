@@ -102,6 +102,7 @@ import { buildTemporaryWorktreeBranchName } from "@t3tools/shared/git";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
 import { BranchToolbar } from "./BranchToolbar";
+import { MultiRepoDialog } from "./MultiRepoDialog";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import PlanSidebar from "./PlanSidebar";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
@@ -3903,7 +3904,7 @@ export default function ChatView(props: ChatViewProps) {
                 />
               </div>
             </div>
-            {isGitRepo && (
+            {isGitRepo ? (
               <BranchToolbar
                 environmentId={activeThread.environmentId}
                 threadId={activeThread.id}
@@ -3924,7 +3925,20 @@ export default function ChatView(props: ChatViewProps) {
                 {...(hasMultipleEnvironments ? { onEnvironmentChange } : {})}
                 availableEnvironments={logicalProjectEnvironments}
               />
-            )}
+            ) : activeThread && activeProject ? (
+              // Not detected as a single git repo (e.g. a fresh draft, or a
+              // monorepo root). The multi-repo control must still be available —
+              // it's how you set up a multi-repo session in the first place.
+              <div className="mx-auto flex w-full max-w-208 items-center justify-end px-2.5 pb-3 pt-1 sm:px-3">
+                <MultiRepoDialog
+                  environmentId={activeThread.environmentId}
+                  projectId={activeThread.projectId}
+                  threadId={activeThread.id}
+                  workspaceRoot={activeProject.cwd}
+                  {...(routeKind === "draft" && draftId ? { draftId } : {})}
+                />
+              </div>
+            ) : null}
           </div>
 
           {pullRequestDialogState ? (
