@@ -41,7 +41,9 @@ export function MultiRepoDialog({
   const [open, setOpen] = useState(false);
   const [repos, setRepos] = useState<readonly ProjectGitRepo[]>([]);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const [branch, setBranch] = useState("multi-repo/session");
+  // Per-thread branch so sessions don't collide on a shared branch name across
+  // the same sub-repo (git can't check out one branch in two worktrees).
+  const [branch, setBranch] = useState(`multi-repo/${threadId.slice(0, 8)}`);
   const [status, setStatus] = useState("");
   const [created, setCreated] = useState<readonly ProjectRepoWorktree[]>([]);
   const [inSession, setInSession] = useState<ReadonlySet<string>>(new Set());
