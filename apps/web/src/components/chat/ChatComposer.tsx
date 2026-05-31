@@ -8,6 +8,7 @@ import type {
   RuntimeMode,
   ScopedThreadRef,
   ServerProvider,
+  ServerProviderSlashCommand,
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
@@ -37,6 +38,7 @@ import {
   replaceTextRange,
 } from "../../composer-logic";
 import { deriveComposerSendState, readFileAsDataUrl } from "../ChatView.logic";
+import { readEnvironmentApi } from "../../environmentApi";
 import {
   type ComposerImageAttachment,
   type DraftId,
@@ -715,6 +717,39 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     [selectedProviderEntry],
   );
 
+  // Project-scoped slash commands (e.g. `/wazuh` from the active repo's
+  // `.claude/skills`). The provider snapshot's `slashCommands` are probed
+  // project-blind (no cwd), so they only carry account/user-level commands.
+  // Discover the cwd-aware set on demand and merge it into the `/` palette.
+  // Claude-only: the probe always runs the Claude SDK, so gate on the active
+  // provider to avoid surfacing Claude commands on e.g. a Codex thread.
+  const isClaudeProvider = String(selectedProviderStatus?.driver ?? "") === "claudeAgent";
+  const [projectSlashCommands, setProjectSlashCommands] = useState<
+    readonly ServerProviderSlashCommand[]
+  >([]);
+  useEffect(() => {
+    if (!isClaudeProvider || !environmentId || !gitCwd) {
+      setProjectSlashCommands([]);
+      return;
+    }
+    const discover = readEnvironmentApi(environmentId)?.vcs.discoverProjectSlashCommands;
+    if (!discover) {
+      setProjectSlashCommands([]);
+      return;
+    }
+    let cancelled = false;
+    void discover({ cwd: gitCwd })
+      .then((result) => {
+        if (!cancelled) setProjectSlashCommands(result.slashCommands);
+      })
+      .catch(() => {
+        if (!cancelled) setProjectSlashCommands([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isClaudeProvider, environmentId, gitCwd]);
+
   const composerProviderState = useMemo(
     () =>
       getComposerProviderState({
@@ -877,7 +912,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           description: "Switch this thread back to normal build mode",
         },
       ] satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "slash-command" }>>;
-      const providerSlashCommandItems = (selectedProviderStatus?.slashCommands ?? []).map(
+      const providerSlashCommandItems = (
+        projectSlashCommands.length > 0
+          ? projectSlashCommands
+          : (selectedProviderStatus?.slashCommands ?? [])
+      ).map(
         (command) => ({
           id: `provider-slash-command:${selectedProvider}:${command.name}`,
           type: "provider-slash-command" as const,
@@ -910,7 +949,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       );
     }
     return [];
-  }, [composerTrigger, selectedProvider, selectedProviderStatus, workspaceEntries.entries]);
+  }, [
+    composerTrigger,
+    projectSlashCommands,
+    selectedProvider,
+    selectedProviderStatus,
+    workspaceEntries.entries,
+  ]);
 
   const composerMenuOpen = Boolean(composerTrigger);
   const composerMenuSearchKey = composerTrigger

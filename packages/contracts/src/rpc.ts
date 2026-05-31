@@ -97,6 +97,8 @@ import {
   ServerSignalProcessResult,
   ServerUpsertKeybindingInput,
   ServerUpsertKeybindingResult,
+  DiscoverProjectSlashCommandsInput,
+  DiscoverProjectSlashCommandsResult,
 } from "./server.ts";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "./settings.ts";
 import {
@@ -131,6 +133,7 @@ export const WS_METHODS = {
   vcsListRefs: "vcs.listRefs",
   vcsCreateWorktree: "vcs.createWorktree",
   vcsDiscoverProjectRepos: "vcs.discoverProjectRepos",
+  vcsDiscoverProjectSlashCommands: "vcs.discoverProjectSlashCommands",
   vcsCreateMultiRepoWorktree: "vcs.createMultiRepoWorktree",
   vcsRemoveWorktree: "vcs.removeWorktree",
   vcsCreateRef: "vcs.createRef",
@@ -362,6 +365,15 @@ export const WsVcsDiscoverProjectReposRpc = Rpc.make(WS_METHODS.vcsDiscoverProje
   error: GitCommandError,
 });
 
+export const WsVcsDiscoverProjectSlashCommandsRpc = Rpc.make(
+  WS_METHODS.vcsDiscoverProjectSlashCommands,
+  {
+    payload: DiscoverProjectSlashCommandsInput,
+    success: DiscoverProjectSlashCommandsResult,
+    error: GitCommandError,
+  },
+);
+
 export const WsVcsCreateMultiRepoWorktreeRpc = Rpc.make(WS_METHODS.vcsCreateMultiRepoWorktree, {
   payload: CreateMultiRepoWorktreeInput,
   success: ThreadMultiRepoWorktree,
@@ -556,6 +568,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsVcsListRefsRpc,
   WsVcsCreateWorktreeRpc,
   WsVcsDiscoverProjectReposRpc,
+  WsVcsDiscoverProjectSlashCommandsRpc,
   WsVcsCreateMultiRepoWorktreeRpc,
   WsVcsRemoveWorktreeRpc,
   WsVcsCreateRefRpc,

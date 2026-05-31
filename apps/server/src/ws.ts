@@ -1,6 +1,7 @@
 import * as Cause from "effect/Cause";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
+import * as Cache from "effect/Cache";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -55,6 +56,7 @@ import {
 } from "./observability/RpcInstrumentation.ts";
 import { ProviderRegistry } from "./provider/Services/ProviderRegistry.ts";
 import * as ProviderMaintenanceRunner from "./provider/providerMaintenanceRunner.ts";
+import { probeClaudeSlashCommands } from "./provider/Layers/ClaudeProvider.ts";
 import { ServerLifecycleEvents } from "./serverLifecycleEvents.ts";
 import { ServerRuntimeStartup } from "./serverRuntimeStartup.ts";
 import { redactServerSettingsForClient, ServerSettingsService } from "./serverSettings.ts";
@@ -181,6 +183,15 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       const terminalManager = yield* TerminalManager;
       const providerRegistry = yield* ProviderRegistry;
       const providerMaintenanceRunner = yield* ProviderMaintenanceRunner.ProviderMaintenanceRunner;
+      // Project-scoped slash-command palette: the cwd-aware Claude probe (~1-2s)
+      // is cached per cwd so repeated composer mounts / thread switches don't
+      // respawn it. Short TTL picks up newly-added skills/commands without a
+      // server restart.
+      const projectSlashCommandCache = yield* Cache.make({
+        capacity: 64,
+        timeToLive: Duration.minutes(2),
+        lookup: (cwd: string) => probeClaudeSlashCommands({ cwd }),
+      });
       const config = yield* ServerConfig;
       const lifecycleEvents = yield* ServerLifecycleEvents;
       const serverSettings = yield* ServerSettingsService;
@@ -1127,6 +1138,14 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                       })
                     : null,
               })),
+            ),
+            { "rpc.aggregate": "vcs" },
+          ),
+        [WS_METHODS.vcsDiscoverProjectSlashCommands]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.vcsDiscoverProjectSlashCommands,
+            Cache.get(projectSlashCommandCache, input.cwd).pipe(
+              Effect.map((slashCommands) => ({ slashCommands })),
             ),
             { "rpc.aggregate": "vcs" },
           ),

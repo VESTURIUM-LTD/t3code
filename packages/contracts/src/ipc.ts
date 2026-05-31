@@ -39,6 +39,8 @@ import type {
   ServerSignalProcessResult,
   ServerTraceDiagnosticsResult,
   ServerUpsertKeybindingResult,
+  DiscoverProjectSlashCommandsInput,
+  DiscoverProjectSlashCommandsResult,
 } from "./server.ts";
 import type {
   TerminalAttachInput,
@@ -546,6 +548,9 @@ export interface EnvironmentApi {
     discoverProjectRepos?: (
       input: DiscoverProjectReposInput,
     ) => Promise<DiscoverProjectReposResult>;
+    discoverProjectSlashCommands?: (
+      input: DiscoverProjectSlashCommandsInput,
+    ) => Promise<DiscoverProjectSlashCommandsResult>;
     createMultiRepoWorktree?: (
       input: CreateMultiRepoWorktreeInput,
     ) => Promise<ThreadMultiRepoWorktree>;

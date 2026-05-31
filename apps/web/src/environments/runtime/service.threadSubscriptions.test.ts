@@ -119,6 +119,7 @@ vi.mock("@t3tools/client-runtime", async (importOriginal) => {
       listRefs: vi.fn(),
       createWorktree: vi.fn(),
       discoverProjectRepos: vi.fn(),
+      discoverProjectSlashCommands: vi.fn(),
       createMultiRepoWorktree: vi.fn(),
       removeWorktree: vi.fn(),
       createRef: vi.fn(),
