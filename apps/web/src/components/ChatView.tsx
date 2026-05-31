@@ -3943,7 +3943,7 @@ export default function ChatView(props: ChatViewProps) {
               // Not detected as a single git repo (e.g. a fresh draft, or a
               // monorepo root). The multi-repo control must still be available —
               // it's how you set up a multi-repo session in the first place.
-              <div className="mx-auto flex w-full max-w-208 items-center justify-end px-2.5 pb-3 pt-1 sm:px-3">
+              <div className="mx-auto flex w-full max-w-208 items-center justify-start px-2.5 pb-3 pt-1 sm:px-3">
                 <MultiRepoDialog
                   environmentId={activeThread.environmentId}
                   projectId={activeThread.projectId}

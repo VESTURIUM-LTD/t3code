@@ -275,6 +275,15 @@ export const BranchToolbar = memo(function BranchToolbar({
             activeWorktreePath={activeWorktreePath}
             onEnvModeChange={onEnvModeChange}
           />
+          {activeProjectId ? (
+            <MultiRepoDialog
+              environmentId={environmentId}
+              projectId={activeProjectId}
+              threadId={threadId}
+              workspaceRoot={activeProject.cwd}
+              {...(draftId ? { draftId } : {})}
+            />
+          ) : null}
         </div>
       )}
 
@@ -290,15 +299,6 @@ export const BranchToolbar = memo(function BranchToolbar({
         {...(onCheckoutPullRequestRequest ? { onCheckoutPullRequestRequest } : {})}
         {...(onComposerFocusRequest ? { onComposerFocusRequest } : {})}
       />
-      {!isMobile && activeProjectId ? (
-        <MultiRepoDialog
-          environmentId={environmentId}
-          projectId={activeProjectId}
-          threadId={threadId}
-          workspaceRoot={activeProject.cwd}
-          {...(draftId ? { draftId } : {})}
-        />
-      ) : null}
     </div>
   );
 });

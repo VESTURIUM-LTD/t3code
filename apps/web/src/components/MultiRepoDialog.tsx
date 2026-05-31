@@ -1,3 +1,4 @@
+import { FoldersIcon } from "lucide-react";
 import { useState } from "react";
 
 import { scopeThreadRef } from "@t3tools/client-runtime";
@@ -53,9 +54,17 @@ export function MultiRepoDialog({
     setStatus("Discovering repositories…");
     try {
       const result = await api.vcs.discoverProjectRepos({ projectId, workspaceRoot });
-      setRepos(result.repos);
-      setSelected(new Set(result.repos.map((repo) => repo.id)));
-      setStatus(`Found ${result.repos.length} repositor${result.repos.length === 1 ? "y" : "ies"}.`);
+      // Drop the workspace-root "." entry (the monorepo umbrella) when there are
+      // nested sub-repos — those are what you actually want in a multi-repo session.
+      const nested = result.repos.filter((repo) => repo.relativePath !== ".");
+      const list = nested.length > 0 ? nested : result.repos;
+      setRepos(list);
+      setSelected(new Set(list.map((repo) => repo.id)));
+      setStatus(
+        list.length === 0
+          ? "No repositories found under this project."
+          : `Found ${list.length} ${list.length === 1 ? "repository" : "repositories"}.`,
+      );
     } catch (error) {
       setStatus(`Discovery failed: ${String(error)}`);
     }
@@ -109,8 +118,10 @@ export function MultiRepoDialog({
   return (
     <div className="relative">
       <Button
-        variant="outline"
-        size="sm"
+        variant="ghost"
+        size="xs"
+        className="font-medium"
+        aria-label="Multi-repo session"
         onClick={() => {
           const next = !open;
           setOpen(next);
@@ -119,11 +130,12 @@ export function MultiRepoDialog({
           }
         }}
       >
+        <FoldersIcon className="size-3" />
         Multi-repo
       </Button>
 
       {open ? (
-        <div className="absolute bottom-full right-0 z-50 mb-2 w-96 rounded-lg border border-border bg-popover p-3 shadow-lg">
+        <div className="absolute bottom-full left-0 z-50 mb-2 w-96 rounded-lg border border-border bg-popover p-3 shadow-lg">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-medium">Multi-repo session</span>
             <Button variant="ghost" size="sm" onClick={() => void discover()}>
@@ -153,8 +165,12 @@ export function MultiRepoDialog({
                       checked={selected.has(repo.id)}
                       onChange={() => toggle(repo.id)}
                     />
-                    <span className="font-medium">{repo.displayName}</span>
-                    <span className="text-muted-foreground">{repo.relativePath}</span>
+                    <span className="truncate font-medium">{repo.displayName}</span>
+                    {repo.relativePath !== repo.displayName ? (
+                      <span className="truncate text-xs text-muted-foreground">
+                        {repo.relativePath}
+                      </span>
+                    ) : null}
                   </label>
                 ))}
               </div>
