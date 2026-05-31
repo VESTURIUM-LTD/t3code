@@ -42,6 +42,10 @@ import {
 import { KeybindingsConfigError } from "./keybindings.ts";
 import {
   ClientOrchestrationCommand,
+  CreateMultiRepoWorktreeInput,
+  DiscoverProjectReposInput,
+  DiscoverProjectReposResult,
+  ThreadMultiRepoWorktree,
   ORCHESTRATION_WS_METHODS,
   OrchestrationDispatchCommandError,
   OrchestrationGetFullThreadDiffError,
@@ -126,6 +130,8 @@ export const WS_METHODS = {
   vcsRefreshStatus: "vcs.refreshStatus",
   vcsListRefs: "vcs.listRefs",
   vcsCreateWorktree: "vcs.createWorktree",
+  vcsDiscoverProjectRepos: "vcs.discoverProjectRepos",
+  vcsCreateMultiRepoWorktree: "vcs.createMultiRepoWorktree",
   vcsRemoveWorktree: "vcs.removeWorktree",
   vcsCreateRef: "vcs.createRef",
   vcsSwitchRef: "vcs.switchRef",
@@ -350,6 +356,18 @@ export const WsVcsCreateWorktreeRpc = Rpc.make(WS_METHODS.vcsCreateWorktree, {
   error: GitCommandError,
 });
 
+export const WsVcsDiscoverProjectReposRpc = Rpc.make(WS_METHODS.vcsDiscoverProjectRepos, {
+  payload: DiscoverProjectReposInput,
+  success: DiscoverProjectReposResult,
+  error: GitCommandError,
+});
+
+export const WsVcsCreateMultiRepoWorktreeRpc = Rpc.make(WS_METHODS.vcsCreateMultiRepoWorktree, {
+  payload: CreateMultiRepoWorktreeInput,
+  success: ThreadMultiRepoWorktree,
+  error: GitCommandError,
+});
+
 export const WsVcsRemoveWorktreeRpc = Rpc.make(WS_METHODS.vcsRemoveWorktree, {
   payload: VcsRemoveWorktreeInput,
   error: GitCommandError,
@@ -537,6 +555,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitPreparePullRequestThreadRpc,
   WsVcsListRefsRpc,
   WsVcsCreateWorktreeRpc,
+  WsVcsDiscoverProjectReposRpc,
+  WsVcsCreateMultiRepoWorktreeRpc,
   WsVcsRemoveWorktreeRpc,
   WsVcsCreateRefRpc,
   WsVcsSwitchRefRpc,

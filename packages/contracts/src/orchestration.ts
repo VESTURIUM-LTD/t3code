@@ -226,6 +226,26 @@ export const ThreadMultiRepoWorktree = Schema.Struct({
 });
 export type ThreadMultiRepoWorktree = typeof ThreadMultiRepoWorktree.Type;
 
+// --- Multi-repo WS RPC payloads ---
+export const DiscoverProjectReposInput = Schema.Struct({
+  projectId: TrimmedNonEmptyString,
+  workspaceRoot: TrimmedNonEmptyString,
+});
+export type DiscoverProjectReposInput = typeof DiscoverProjectReposInput.Type;
+
+export const DiscoverProjectReposResult = Schema.Struct({
+  repos: Schema.Array(ProjectGitRepo),
+});
+export type DiscoverProjectReposResult = typeof DiscoverProjectReposResult.Type;
+
+export const CreateMultiRepoWorktreeInput = Schema.Struct({
+  threadId: ThreadId,
+  branch: TrimmedNonEmptyString,
+  baseBranch: Schema.NullOr(TrimmedNonEmptyString),
+  repos: Schema.Array(ProjectGitRepo),
+});
+export type CreateMultiRepoWorktreeInput = typeof CreateMultiRepoWorktreeInput.Type;
+
 export const OrchestrationProject = Schema.Struct({
   id: ProjectId,
   title: TrimmedNonEmptyString,

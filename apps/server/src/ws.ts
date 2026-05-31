@@ -65,6 +65,8 @@ import { WorkspacePathOutsideRootError } from "./workspace/Services/WorkspacePat
 import { VcsStatusBroadcaster } from "./vcs/VcsStatusBroadcaster.ts";
 import { VcsProvisioningService } from "./vcs/VcsProvisioningService.ts";
 import { GitWorkflowService } from "./git/GitWorkflowService.ts";
+import { discoverProjectGitRepos } from "./git/projectRepoDiscovery.ts";
+import { createMultiRepoWorktrees } from "./git/multiRepoWorktree.ts";
 import { ReviewService } from "./review/ReviewService.ts";
 import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptRunner.ts";
 import { RepositoryIdentityResolver } from "./project/Services/RepositoryIdentityResolver.ts";
@@ -1096,6 +1098,47 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
           observeRpcEffect(
             WS_METHODS.vcsCreateWorktree,
             gitWorkflow.createWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            { "rpc.aggregate": "vcs" },
+          ),
+        [WS_METHODS.vcsDiscoverProjectRepos]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.vcsDiscoverProjectRepos,
+            Effect.promise(() =>
+              discoverProjectGitRepos(input.projectId, input.workspaceRoot),
+            ).pipe(Effect.map((repos) => ({ repos }))),
+            { "rpc.aggregate": "vcs" },
+          ),
+        [WS_METHODS.vcsCreateMultiRepoWorktree]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.vcsCreateMultiRepoWorktree,
+            Effect.gen(function* () {
+              const result = yield* createMultiRepoWorktrees({
+                threadId: input.threadId,
+                branch: input.branch,
+                baseBranch: input.baseBranch,
+                repos: input.repos,
+              }).pipe(
+                Effect.provideService(GitWorkflowService, gitWorkflow),
+                Effect.provideService(ServerConfig, config),
+              );
+              // Persist worktreePath = synthetic parent so the agent's cwd
+              // (resolveThreadWorkspaceCwd) points there and it sees every repo.
+              yield* orchestrationEngine
+                .dispatch({
+                  type: "thread.meta.update",
+                  commandId: CommandId.make(`server:multi-repo-worktree:${input.threadId}`),
+                  threadId: input.threadId,
+                  branch: input.branch,
+                  worktreePath: result.parentPath,
+                  multiRepoWorktree: result,
+                  repoBranches: input.repos.map((repo) => ({
+                    repoId: repo.id,
+                    branch: input.branch,
+                  })),
+                })
+                .pipe(Effect.orDie);
+              return result;
+            }),
             { "rpc.aggregate": "vcs" },
           ),
         [WS_METHODS.vcsRemoveWorktree]: (input) =>
