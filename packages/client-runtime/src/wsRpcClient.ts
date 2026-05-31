@@ -105,6 +105,10 @@ export interface WsRpcClient {
     ) => () => void;
     readonly listRefs: RpcUnaryMethod<typeof WS_METHODS.vcsListRefs>;
     readonly createWorktree: RpcUnaryMethod<typeof WS_METHODS.vcsCreateWorktree>;
+    readonly discoverProjectRepos: RpcUnaryMethod<typeof WS_METHODS.vcsDiscoverProjectRepos>;
+    readonly createMultiRepoWorktree: RpcUnaryMethod<
+      typeof WS_METHODS.vcsCreateMultiRepoWorktree
+    >;
     readonly removeWorktree: RpcUnaryMethod<typeof WS_METHODS.vcsRemoveWorktree>;
     readonly createRef: RpcUnaryMethod<typeof WS_METHODS.vcsCreateRef>;
     readonly switchRef: RpcUnaryMethod<typeof WS_METHODS.vcsSwitchRef>;
@@ -243,6 +247,10 @@ export function createWsRpcClient(
       listRefs: (input) => transport.request((client) => client[WS_METHODS.vcsListRefs](input)),
       createWorktree: (input) =>
         transport.request((client) => client[WS_METHODS.vcsCreateWorktree](input)),
+      discoverProjectRepos: (input) =>
+        transport.request((client) => client[WS_METHODS.vcsDiscoverProjectRepos](input)),
+      createMultiRepoWorktree: (input) =>
+        transport.request((client) => client[WS_METHODS.vcsCreateMultiRepoWorktree](input)),
       removeWorktree: (input) =>
         transport.request((client) => client[WS_METHODS.vcsRemoveWorktree](input)),
       createRef: (input) => transport.request((client) => client[WS_METHODS.vcsCreateRef](input)),

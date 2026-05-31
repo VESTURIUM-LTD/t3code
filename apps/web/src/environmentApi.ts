@@ -36,6 +36,8 @@ export function createEnvironmentApi(rpcClient: WsRpcClient): EnvironmentApi {
       onStatus: (input, callback, options) => rpcClient.vcs.onStatus(input, callback, options),
       listRefs: rpcClient.vcs.listRefs,
       createWorktree: rpcClient.vcs.createWorktree,
+      discoverProjectRepos: rpcClient.vcs.discoverProjectRepos,
+      createMultiRepoWorktree: rpcClient.vcs.createMultiRepoWorktree,
       removeWorktree: rpcClient.vcs.removeWorktree,
       createRef: rpcClient.vcs.createRef,
       switchRef: rpcClient.vcs.switchRef,

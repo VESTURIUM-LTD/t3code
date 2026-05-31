@@ -118,6 +118,8 @@ vi.mock("@t3tools/client-runtime", async (importOriginal) => {
       onStatus: vi.fn(() => () => undefined),
       listRefs: vi.fn(),
       createWorktree: vi.fn(),
+      discoverProjectRepos: vi.fn(),
+      createMultiRepoWorktree: vi.fn(),
       removeWorktree: vi.fn(),
       createRef: vi.fn(),
       switchRef: vi.fn(),
