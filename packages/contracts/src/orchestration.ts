@@ -241,6 +241,8 @@ export const DiscoverProjectReposResult = Schema.Struct({
   repos: Schema.Array(ProjectGitRepo),
   // Repo ids that already have a worktree under the thread's session parent.
   existingRepoIds: Schema.Array(TrimmedNonEmptyString),
+  // The session base dir for the given thread+branch (null when not provided).
+  sessionParentPath: Schema.NullOr(TrimmedNonEmptyString),
 });
 export type DiscoverProjectReposResult = typeof DiscoverProjectReposResult.Type;
 

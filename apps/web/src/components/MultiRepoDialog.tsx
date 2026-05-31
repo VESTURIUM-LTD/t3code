@@ -48,6 +48,7 @@ export function MultiRepoDialog({
   const [created, setCreated] = useState<readonly ProjectRepoWorktree[]>([]);
   const [inSession, setInSession] = useState<ReadonlySet<string>>(new Set());
   const [rootRepo, setRootRepo] = useState<ProjectGitRepo | null>(null);
+  const [sessionPath, setSessionPath] = useState<string | null>(null);
 
   const discover = async () => {
     const api = readEnvironmentApi(environmentId);
@@ -68,6 +69,7 @@ export function MultiRepoDialog({
       setRootRepo(result.repos.find((repo) => repo.relativePath === ".") ?? null);
       setRepos(list);
       setInSession(existing);
+      setSessionPath(result.sessionParentPath);
       // Pre-select repos already in this session; a fresh session starts with none
       // selected so you pick deliberately instead of unchecking everything.
       setSelected(new Set(list.filter((repo) => existing.has(repo.id)).map((repo) => repo.id)));
@@ -158,17 +160,39 @@ export function MultiRepoDialog({
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-medium">Multi-repo session</span>
             <Button variant="ghost" size="sm" onClick={() => void discover()}>
-              Re-scan
+              Refresh
             </Button>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="multi-repo-branch">Branch</Label>
+            <Label htmlFor="multi-repo-branch">Session branch</Label>
             <Input
               id="multi-repo-branch"
               value={branch}
               onChange={(event) => setBranch(event.target.value)}
+              className="font-mono text-xs"
             />
+          </div>
+
+          {/* Current session info */}
+          <div className="mt-2 space-y-1 rounded-md border border-border bg-muted/40 px-2.5 py-2 text-xs">
+            <div className="flex items-baseline gap-2">
+              <span className="w-16 shrink-0 text-muted-foreground">In session</span>
+              <span className="text-foreground">
+                {inSession.size > 0
+                  ? `project root + ${inSession.size} repo${inSession.size === 1 ? "" : "s"}`
+                  : "project root only (no repos added yet)"}
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="w-16 shrink-0 text-muted-foreground">Base</span>
+              <code
+                className="truncate font-mono text-muted-foreground"
+                title={sessionPath ?? undefined}
+              >
+                {sessionPath ?? "— not created yet —"}
+              </code>
+            </div>
           </div>
 
           <div className="mt-3 space-y-1.5">

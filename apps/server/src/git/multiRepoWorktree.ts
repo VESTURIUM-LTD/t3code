@@ -1,4 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 
 import * as Effect from "effect/Effect";
@@ -55,12 +56,46 @@ export const createMultiRepoWorktrees = Effect.fn("createMultiRepoWorktrees")(fu
       });
       continue;
     }
-    const result = yield* gitWorkflow.createWorktree({
-      cwd: entry.sourceRootPath,
-      refName: input.baseBranch ?? "HEAD",
-      newRefName: input.branch,
-      path: entry.worktreePath,
-    });
+    const result = yield* gitWorkflow
+      .createWorktree({
+        cwd: entry.sourceRootPath,
+        refName: input.baseBranch ?? "HEAD",
+        newRefName: input.branch,
+        path: entry.worktreePath,
+      })
+      .pipe(
+        // The per-session branch may already exist (orphaned after a prior
+        // worktree dir was removed). Two distinct failure modes:
+        //   "a branch named '<b>' already exists"        — branch lingers, free
+        //   "'<b>' is already used by worktree at <path>" — branch is still
+        //      registered to a worktree dir that no longer exists (stale).
+        // `git worktree prune` clears the stale registration; afterwards the
+        // branch is free, so we attach it (omit newRefName) instead of failing.
+        Effect.catchIf(
+          (err) =>
+            err.detail.includes("already exists") ||
+            err.detail.includes("already used by worktree"),
+          () =>
+            Effect.sync(() => {
+              try {
+                execFileSync("git", ["worktree", "prune"], {
+                  cwd: entry.sourceRootPath,
+                  stdio: "ignore",
+                });
+              } catch {
+                // best-effort: prune failure shouldn't mask the attach attempt
+              }
+            }).pipe(
+              Effect.andThen(() =>
+                gitWorkflow.createWorktree({
+                  cwd: entry.sourceRootPath,
+                  refName: input.branch,
+                  path: entry.worktreePath,
+                }),
+              ),
+            ),
+        ),
+      );
     created.push({
       repoId: entry.repoId,
       repoRelativePath: entry.repoRelativePath,

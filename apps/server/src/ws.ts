@@ -67,6 +67,7 @@ import { VcsProvisioningService } from "./vcs/VcsProvisioningService.ts";
 import { GitWorkflowService } from "./git/GitWorkflowService.ts";
 import { discoverProjectGitRepos } from "./git/projectRepoDiscovery.ts";
 import { createMultiRepoWorktrees, findExistingRepoWorktrees } from "./git/multiRepoWorktree.ts";
+import { buildSyntheticWorktreeParent } from "./git/projectWorktreeLayout.ts";
 import { ReviewService } from "./review/ReviewService.ts";
 import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptRunner.ts";
 import { RepositoryIdentityResolver } from "./project/Services/RepositoryIdentityResolver.ts";
@@ -1117,6 +1118,14 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                         repos,
                       })
                     : [],
+                sessionParentPath:
+                  input.threadId && input.branch
+                    ? buildSyntheticWorktreeParent({
+                        worktreesDir: config.worktreesDir,
+                        threadId: input.threadId,
+                        branch: input.branch,
+                      })
+                    : null,
               })),
             ),
             { "rpc.aggregate": "vcs" },
