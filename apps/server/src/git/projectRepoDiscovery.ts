@@ -64,13 +64,18 @@ export async function discoverProjectGitRepos(
       }
     }
 
+    const isWorkspaceRoot = current === workspaceRoot;
     if (hasGitEntry) {
       try {
         discovered.add(realpathSync.native(current));
       } catch {
         discovered.add(current);
       }
-      continue;
+      // Stop descending into a *nested* repo, but keep descending through the
+      // workspace root itself so nested sub-repos (monorepo layout) are found.
+      if (!isWorkspaceRoot) {
+        continue;
+      }
     }
 
     for (const entry of entries) {

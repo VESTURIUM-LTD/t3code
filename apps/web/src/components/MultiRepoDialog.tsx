@@ -110,7 +110,7 @@ export function MultiRepoDialog({
       </Button>
 
       {open ? (
-        <div className="absolute right-0 z-50 mt-2 w-96 rounded-lg border border-border bg-popover p-3 shadow-lg">
+        <div className="absolute bottom-full right-0 z-50 mb-2 w-96 rounded-lg border border-border bg-popover p-3 shadow-lg">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-medium">Multi-repo session</span>
             <Button variant="ghost" size="sm" onClick={() => void discover()}>
