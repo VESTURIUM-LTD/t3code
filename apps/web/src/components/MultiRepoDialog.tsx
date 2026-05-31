@@ -49,6 +49,9 @@ export function MultiRepoDialog({
   const [inSession, setInSession] = useState<ReadonlySet<string>>(new Set());
   const [rootRepo, setRootRepo] = useState<ProjectGitRepo | null>(null);
   const [sessionPath, setSessionPath] = useState<string | null>(null);
+  // inSession ids include the always-present project root; count sub-repos only
+  // so the summary reads "project root + N repos" without double-counting root.
+  const inSessionSubCount = [...inSession].filter((id) => id !== rootRepo?.id).length;
 
   const discover = async () => {
     const api = readEnvironmentApi(environmentId);
@@ -66,7 +69,10 @@ export function MultiRepoDialog({
       const existing = new Set(result.existingRepoIds);
       // The project root is always included as the session base (skills + CLAUDE.md
       // + .mcp.json auto-load there) — kept out of the pickable list.
-      setRootRepo(result.repos.find((repo) => repo.relativePath === ".") ?? null);
+      const rootEntry = result.repos.find((repo) => repo.relativePath === ".") ?? null;
+      // existingRepoIds includes the root base; count sub-repos only for the summary.
+      const existingSubCount = [...existing].filter((id) => id !== rootEntry?.id).length;
+      setRootRepo(rootEntry);
       setRepos(list);
       setInSession(existing);
       setSessionPath(result.sessionParentPath);
@@ -74,8 +80,8 @@ export function MultiRepoDialog({
       // selected so you pick deliberately instead of unchecking everything.
       setSelected(new Set(list.filter((repo) => existing.has(repo.id)).map((repo) => repo.id)));
       setStatus(
-        existing.size > 0
-          ? `${existing.size} in session · ${list.length} available — check more to add.`
+        existingSubCount > 0
+          ? `${existingSubCount} in session · ${list.length} available — check more to add.`
           : list.length === 0
             ? "No repositories found under this project."
             : `Found ${list.length} ${list.length === 1 ? "repository" : "repositories"} — select which to include.`,
@@ -179,8 +185,8 @@ export function MultiRepoDialog({
             <div className="flex items-baseline gap-2">
               <span className="w-16 shrink-0 text-muted-foreground">In session</span>
               <span className="text-foreground">
-                {inSession.size > 0
-                  ? `project root + ${inSession.size} repo${inSession.size === 1 ? "" : "s"}`
+                {inSessionSubCount > 0
+                  ? `project root + ${inSessionSubCount} repo${inSessionSubCount === 1 ? "" : "s"}`
                   : "project root only (no repos added yet)"}
               </span>
             </div>

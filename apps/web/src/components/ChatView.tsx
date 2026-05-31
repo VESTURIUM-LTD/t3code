@@ -3945,6 +3945,9 @@ export default function ChatView(props: ChatViewProps) {
               // it's how you set up a multi-repo session in the first place.
               <div className="mx-auto flex w-full max-w-208 items-center justify-start px-2.5 pb-3 pt-1 sm:px-3">
                 <MultiRepoDialog
+                  // Remount per thread so the per-thread branch default + discovered
+                  // repos re-derive instead of going stale across thread navigation.
+                  key={activeThread.id}
                   environmentId={activeThread.environmentId}
                   projectId={activeThread.projectId}
                   threadId={activeThread.id}

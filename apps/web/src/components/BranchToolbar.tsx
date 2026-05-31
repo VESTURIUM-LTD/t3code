@@ -277,6 +277,9 @@ export const BranchToolbar = memo(function BranchToolbar({
           />
           {activeProjectId ? (
             <MultiRepoDialog
+              // Remount per thread so the per-thread branch default + discovered
+              // repos re-derive instead of going stale across thread navigation.
+              key={threadId}
               environmentId={environmentId}
               projectId={activeProjectId}
               threadId={threadId}
