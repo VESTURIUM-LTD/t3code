@@ -197,6 +197,35 @@ export const ProjectScript = Schema.Struct({
 });
 export type ProjectScript = typeof ProjectScript.Type;
 
+// --- Multi-repo support (ported from ashvinnihalani/t3code reference; local-only) ---
+export const ProjectGitRepo = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  rootPath: TrimmedNonEmptyString,
+  relativePath: TrimmedNonEmptyString,
+  displayName: TrimmedNonEmptyString,
+});
+export type ProjectGitRepo = typeof ProjectGitRepo.Type;
+
+export const ProjectRepoWorktree = Schema.Struct({
+  repoId: TrimmedNonEmptyString,
+  repoRelativePath: TrimmedNonEmptyString,
+  sourceRootPath: TrimmedNonEmptyString,
+  worktreePath: TrimmedNonEmptyString,
+});
+export type ProjectRepoWorktree = typeof ProjectRepoWorktree.Type;
+
+export const ThreadRepoBranch = Schema.Struct({
+  repoId: TrimmedNonEmptyString,
+  branch: Schema.NullOr(TrimmedNonEmptyString),
+});
+export type ThreadRepoBranch = typeof ThreadRepoBranch.Type;
+
+export const ThreadMultiRepoWorktree = Schema.Struct({
+  parentPath: TrimmedNonEmptyString,
+  repos: Schema.Array(ProjectRepoWorktree),
+});
+export type ThreadMultiRepoWorktree = typeof ThreadMultiRepoWorktree.Type;
+
 export const OrchestrationProject = Schema.Struct({
   id: ProjectId,
   title: TrimmedNonEmptyString,
@@ -204,6 +233,7 @@ export const OrchestrationProject = Schema.Struct({
   repositoryIdentity: Schema.optional(Schema.NullOr(RepositoryIdentity)),
   defaultModelSelection: Schema.NullOr(ModelSelection),
   scripts: Schema.Array(ProjectScript),
+  gitRepos: Schema.optional(Schema.Array(ProjectGitRepo)),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   deletedAt: Schema.NullOr(IsoDateTime),
@@ -341,6 +371,8 @@ export const OrchestrationThread = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  repoBranches: Schema.optional(Schema.Array(ThreadRepoBranch)),
+  multiRepoWorktree: Schema.optional(Schema.NullOr(ThreadMultiRepoWorktree)),
   latestTurn: Schema.NullOr(OrchestrationLatestTurn),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -371,6 +403,7 @@ export const OrchestrationProjectShell = Schema.Struct({
   repositoryIdentity: Schema.optional(Schema.NullOr(RepositoryIdentity)),
   defaultModelSelection: Schema.NullOr(ModelSelection),
   scripts: Schema.Array(ProjectScript),
+  gitRepos: Schema.optional(Schema.Array(ProjectGitRepo)),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
@@ -387,6 +420,8 @@ export const OrchestrationThreadShell = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  repoBranches: Schema.optional(Schema.Array(ThreadRepoBranch)),
+  multiRepoWorktree: Schema.optional(Schema.NullOr(ThreadMultiRepoWorktree)),
   latestTurn: Schema.NullOr(OrchestrationLatestTurn),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
