@@ -1,0 +1,194 @@
+name: Internal Desktop Build
+
+# Self-contained pipeline to build the multi-repo fork as installable desktop
+# apps for the team. Unlike the upstream `release.yml` (which needs Blacksmith
+# runners, npm trusted-publishing, and code-signing secrets), this:
+#   - runs entirely on GitHub-hosted runners,
+#   - skips code signing (artifacts are UNSIGNED — see the release notes),
+#   - publishes the artifacts as a GitHub *prerelease* teammates can download.
+#
+# Trigger it by pushing a tag:
+#     git tag desktop-build-1 && git push origin desktop-build-1
+# The workflow runs at the tagged commit, so tag a commit on the branch that
+# has the multi-repo work (e.g. feat/multi-repo). `workflow_dispatch` also
+# works once this file lands on the default branch.
+
+on:
+  push:
+    tags:
+      - "desktop-build-*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: internal-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS arm64 (Apple Silicon)
+            runner: macos-14
+            platform: mac
+            target: dmg
+            arch: arm64
+          - label: macOS x64 (Intel)
+            runner: macos-13
+            platform: mac
+            target: dmg
+            arch: x64
+          - label: Windows x64
+            runner: windows-latest
+            platform: win
+            target: nsis
+            arch: x64
+          - label: Linux x64
+            runner: ubuntu-latest
+            platform: linux
+            target: AppImage
+            arch: x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # node-pty (and other native deps) are rebuilt by electron-builder on
+      # Windows and need the Spectre-mitigated MSVC toolset. Mirrors release.yml.
+      - name: Install Spectre-mitigated MSVC libs
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installPath = & $vswhere -products * -latest -property installationPath
+          $setupExe = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
+          $proc = Start-Process -FilePath $setupExe `
+            -ArgumentList "modify", "--installPath", "`"$installPath`"", "--add", `
+            "Microsoft.VisualStudio.Component.VC.Tools.x86.x64.Spectre", "--quiet", "--norestart" `
+            -Wait -PassThru -NoNewWindow
+          if ($null -eq $proc -or $proc.ExitCode -ne 0) {
+            $code = if ($null -ne $proc) { $proc.ExitCode } else { 1 }
+            Write-Error "Visual Studio Installer failed with exit code $code"
+            exit $code
+          }
+
+      # Unsigned: no --signed flag, so build-desktop-artifact.ts skips signing.
+      # electron-builder is fetched on demand via `bun x --install=fallback`.
+      - name: Build desktop artifact (unsigned)
+        shell: bash
+        run: |
+          bun run dist:desktop:artifact -- \
+            --platform "${{ matrix.platform }}" \
+            --target "${{ matrix.target }}" \
+            --arch "${{ matrix.arch }}" \
+            --verbose
+
+      - name: Collect installable assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-publish
+          shopt -s nullglob
+          for pattern in "release/*.dmg" "release/*.zip" "release/*.AppImage" "release/*.exe"; do
+            for file in $pattern; do cp "$file" release-publish/; done
+          done
+          echo "Collected installable assets:"
+          ls -la release-publish
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-${{ matrix.platform }}-${{ matrix.arch }}
+          path: release-publish/*
+          if-no-files-found: error
+
+  release:
+    name: Publish prerelease
+    needs: build
+    # Run even if some platform legs failed, so partial builds still ship.
+    if: ${{ always() && needs.build.result != 'cancelled' && needs.build.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: dist-artifacts
+
+      - name: Publish GitHub prerelease
+        # All github.* context is passed via env and referenced as quoted shell
+        # vars — never interpolated directly into the script. REF_NAME is a
+        # pusher-controlled tag name, so direct ${{ }} expansion would be a
+        # command-injection vector.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          RUN_NUMBER: ${{ github.run_number }}
+          COMMIT_SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [[ "$REF_TYPE" == "tag" ]]; then
+            tag="$REF_NAME"
+          else
+            tag="desktop-build-$RUN_NUMBER"
+          fi
+
+          mapfile -t files < <(find dist-artifacts -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.AppImage' -o -name '*.exe' \) | sort)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "::error::No installable artifacts were produced by any platform." >&2
+            exit 1
+          fi
+          echo "Publishing ${#files[@]} file(s) under tag $tag:"
+          printf '  - %s\n' "${files[@]}"
+
+          {
+            echo "Internal **multi-repo** build of T3 Code (fork) — unsigned, for the team."
+            echo ""
+            echo "Download the file for your platform:"
+            echo "- macOS Apple Silicon: \`*-arm64.dmg\`  ·  macOS Intel: \`*-x64.dmg\`"
+            echo "- Windows: \`*.exe\`  ·  Linux: \`*.AppImage\`"
+            echo ""
+            echo "**macOS** (not Apple-signed): after dragging to /Applications, run once:"
+            echo '```'
+            echo 'xattr -dr com.apple.quarantine "/Applications/T3 Code.app"'
+            echo '```'
+            echo "or right-click the app → Open → Open."
+            echo ""
+            echo "**Windows**: SmartScreen may warn → \"More info\" → \"Run anyway\"."
+            echo ""
+            echo "Built from commit \`$COMMIT_SHA\`."
+          } > release-notes.md
+
+          gh release create "$tag" \
+            --repo "$REPO" \
+            --target "$COMMIT_SHA" \
+            --title "Multi-repo desktop build ($tag)" \
+            --notes-file release-notes.md \
+            --prerelease \
+            "${files[@]}" \
+          || gh release upload "$tag" "${files[@]}" --repo "$REPO" --clobber
