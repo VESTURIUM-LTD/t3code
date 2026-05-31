@@ -1830,13 +1830,27 @@ export default function ChatView(props: ChatViewProps) {
     if (!completionSummary) return null;
     return deriveCompletionDividerBeforeEntryId(timelineEntries, activeLatestTurn);
   }, [activeLatestTurn, completionSummary, latestTurnSettled, timelineEntries]);
-  const gitCwd = activeProject
+  const primaryGitCwd = activeProject
     ? projectScriptCwd({
         project: { cwd: activeProject.cwd },
         worktreePath: activeThread?.worktreePath ?? null,
       })
     : null;
-  const gitStatusQuery = useVcsStatus({ environmentId, cwd: gitCwd });
+  const primaryGitStatusQuery = useVcsStatus({ environmentId, cwd: primaryGitCwd });
+  // Guard: a thread can carry a worktreePath whose directory has been removed
+  // (e.g. its multi-repo worktrees were deleted). git then reports not-a-repo
+  // for that cwd, which would hide the whole toolbar. Fall back to the project
+  // root so git detection / the branch toolbar keep working.
+  const projectRootGitStatusQuery = useVcsStatus({
+    environmentId,
+    cwd: activeProject?.cwd ?? null,
+  });
+  const worktreeCwdMissing =
+    Boolean(activeThread?.worktreePath) &&
+    activeProject != null &&
+    primaryGitStatusQuery.data?.isRepo === false;
+  const gitCwd = worktreeCwdMissing ? (activeProject?.cwd ?? null) : primaryGitCwd;
+  const gitStatusQuery = worktreeCwdMissing ? projectRootGitStatusQuery : primaryGitStatusQuery;
   const keybindings = useServerKeybindings();
   const availableEditors = useServerAvailableEditors();
   // Prefer an instance-id match so a custom Codex instance (e.g.
