@@ -66,3 +66,23 @@ export const createMultiRepoWorktrees = Effect.fn("createMultiRepoWorktrees")(fu
 
   return { parentPath, repos: created } satisfies ThreadMultiRepoWorktree;
 });
+
+/**
+ * Returns the ids of repos that already have a worktree under the thread's
+ * synthetic parent (for branch). Lets the UI show which repos are already part
+ * of a multi-repo session and pre-select them.
+ */
+export function findExistingRepoWorktrees(input: {
+  worktreesDir: string;
+  threadId: string;
+  branch: string;
+  repos: ReadonlyArray<ProjectGitRepo>;
+}): ReadonlyArray<string> {
+  const parentPath = buildSyntheticWorktreeParent({
+    worktreesDir: input.worktreesDir,
+    threadId: input.threadId,
+    branch: input.branch,
+  });
+  const layout = buildRepoWorktreeLayout({ parentPath, repos: input.repos });
+  return layout.filter((entry) => existsSync(entry.worktreePath)).map((entry) => entry.repoId);
+}

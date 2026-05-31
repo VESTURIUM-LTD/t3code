@@ -44,6 +44,7 @@ export function MultiRepoDialog({
   const [branch, setBranch] = useState("multi-repo/session");
   const [status, setStatus] = useState("");
   const [created, setCreated] = useState<readonly ProjectRepoWorktree[]>([]);
+  const [inSession, setInSession] = useState<ReadonlySet<string>>(new Set());
 
   const discover = async () => {
     const api = readEnvironmentApi(environmentId);
@@ -53,17 +54,23 @@ export function MultiRepoDialog({
     }
     setStatus("Discovering repositories…");
     try {
-      const result = await api.vcs.discoverProjectRepos({ projectId, workspaceRoot });
+      const result = await api.vcs.discoverProjectRepos({ projectId, workspaceRoot, threadId, branch });
       // Drop the workspace-root "." entry (the monorepo umbrella) when there are
       // nested sub-repos — those are what you actually want in a multi-repo session.
       const nested = result.repos.filter((repo) => repo.relativePath !== ".");
       const list = nested.length > 0 ? nested : result.repos;
+      const existing = new Set(result.existingRepoIds);
       setRepos(list);
-      setSelected(new Set(list.map((repo) => repo.id)));
+      setInSession(existing);
+      // Pre-select repos already in this session; a fresh session starts with none
+      // selected so you pick deliberately instead of unchecking everything.
+      setSelected(new Set(list.filter((repo) => existing.has(repo.id)).map((repo) => repo.id)));
       setStatus(
-        list.length === 0
-          ? "No repositories found under this project."
-          : `Found ${list.length} ${list.length === 1 ? "repository" : "repositories"}.`,
+        existing.size > 0
+          ? `${existing.size} in session · ${list.length} available — check more to add.`
+          : list.length === 0
+            ? "No repositories found under this project."
+            : `Found ${list.length} ${list.length === 1 ? "repository" : "repositories"} — select which to include.`,
       );
     } catch (error) {
       setStatus(`Discovery failed: ${String(error)}`);
@@ -102,6 +109,7 @@ export function MultiRepoDialog({
         repos: chosen,
       });
       setCreated(result.repos);
+      setInSession((prev) => new Set([...prev, ...chosen.map((repo) => repo.id)]));
       // Point the (draft) thread at the shared parent so, once started, the agent
       // runs with cwd = parentPath and sees every repo (resolveThreadWorkspaceCwd).
       setDraftThreadContext(draftId ?? scopeThreadRef(environmentId, threadId), {
@@ -171,6 +179,11 @@ export function MultiRepoDialog({
                         {repo.relativePath}
                       </span>
                     ) : null}
+                    {inSession.has(repo.id) ? (
+                      <span className="ml-auto shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        in session
+                      </span>
+                    ) : null}
                   </label>
                 ))}
               </div>
@@ -197,7 +210,7 @@ export function MultiRepoDialog({
               Close
             </Button>
             <Button size="sm" onClick={() => void create()}>
-              Create worktrees
+              {inSession.size > 0 ? "Update session" : "Create worktrees"}
             </Button>
           </div>
         </div>

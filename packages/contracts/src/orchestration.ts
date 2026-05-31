@@ -230,11 +230,17 @@ export type ThreadMultiRepoWorktree = typeof ThreadMultiRepoWorktree.Type;
 export const DiscoverProjectReposInput = Schema.Struct({
   projectId: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
+  // Optional thread context: when provided, the result flags which repos
+  // already have a worktree in this thread's multi-repo session.
+  threadId: Schema.optional(ThreadId),
+  branch: Schema.optional(TrimmedNonEmptyString),
 });
 export type DiscoverProjectReposInput = typeof DiscoverProjectReposInput.Type;
 
 export const DiscoverProjectReposResult = Schema.Struct({
   repos: Schema.Array(ProjectGitRepo),
+  // Repo ids that already have a worktree under the thread's session parent.
+  existingRepoIds: Schema.Array(TrimmedNonEmptyString),
 });
 export type DiscoverProjectReposResult = typeof DiscoverProjectReposResult.Type;
 

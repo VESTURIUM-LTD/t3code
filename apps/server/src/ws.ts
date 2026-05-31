@@ -66,7 +66,7 @@ import { VcsStatusBroadcaster } from "./vcs/VcsStatusBroadcaster.ts";
 import { VcsProvisioningService } from "./vcs/VcsProvisioningService.ts";
 import { GitWorkflowService } from "./git/GitWorkflowService.ts";
 import { discoverProjectGitRepos } from "./git/projectRepoDiscovery.ts";
-import { createMultiRepoWorktrees } from "./git/multiRepoWorktree.ts";
+import { createMultiRepoWorktrees, findExistingRepoWorktrees } from "./git/multiRepoWorktree.ts";
 import { ReviewService } from "./review/ReviewService.ts";
 import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptRunner.ts";
 import { RepositoryIdentityResolver } from "./project/Services/RepositoryIdentityResolver.ts";
@@ -1105,7 +1105,20 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             WS_METHODS.vcsDiscoverProjectRepos,
             Effect.promise(() =>
               discoverProjectGitRepos(input.projectId, input.workspaceRoot),
-            ).pipe(Effect.map((repos) => ({ repos }))),
+            ).pipe(
+              Effect.map((repos) => ({
+                repos,
+                existingRepoIds:
+                  input.threadId && input.branch
+                    ? findExistingRepoWorktrees({
+                        worktreesDir: config.worktreesDir,
+                        threadId: input.threadId,
+                        branch: input.branch,
+                        repos,
+                      })
+                    : [],
+              })),
+            ),
             { "rpc.aggregate": "vcs" },
           ),
         [WS_METHODS.vcsCreateMultiRepoWorktree]: (input) =>
