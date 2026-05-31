@@ -40,21 +40,24 @@ jobs:
             platform: mac
             target: dmg
             arch: arm64
-          - label: macOS x64 (Intel)
-            runner: macos-13
-            platform: mac
-            target: dmg
-            arch: x64
-          - label: Windows x64
-            runner: windows-latest
-            platform: win
-            target: nsis
-            arch: x64
-          - label: Linux x64
-            runner: ubuntu-latest
-            platform: linux
-            target: AppImage
-            arch: x64
+          # Only macOS arm64 is built by default (fastest, covers Apple Silicon).
+          # Uncomment any of these to also build other platforms — fail-fast is
+          # off, so they won't block the macOS build:
+          # - label: macOS x64 (Intel)
+          #   runner: macos-13
+          #   platform: mac
+          #   target: dmg
+          #   arch: x64
+          # - label: Windows x64
+          #   runner: windows-latest
+          #   platform: win
+          #   target: nsis
+          #   arch: x64
+          # - label: Linux x64
+          #   runner: ubuntu-latest
+          #   platform: linux
+          #   target: AppImage
+          #   arch: x64
     steps:
       - name: Checkout
         uses: actions/checkout@v6
