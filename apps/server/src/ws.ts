@@ -1121,8 +1121,11 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                 Effect.provideService(GitWorkflowService, gitWorkflow),
                 Effect.provideService(ServerConfig, config),
               );
-              // Persist worktreePath = synthetic parent so the agent's cwd
-              // (resolveThreadWorkspaceCwd) points there and it sees every repo.
+              // Best-effort: persist worktreePath = synthetic parent so the agent's
+              // cwd (resolveThreadWorkspaceCwd) points there and it sees every repo.
+              // Uses a unique commandId (no permanent-rejection poisoning) and is
+              // skipped silently when the thread isn't persisted yet (draft thread) —
+              // the worktrees are still created and returned regardless.
               yield* orchestrationEngine
                 .dispatch({
                   type: "thread.meta.update",
@@ -1136,7 +1139,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                     branch: input.branch,
                   })),
                 })
-                .pipe(Effect.orDie);
+                .pipe(Effect.ignore);
               return result;
             }),
             { "rpc.aggregate": "vcs" },
