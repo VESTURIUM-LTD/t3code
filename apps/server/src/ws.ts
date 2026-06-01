@@ -67,7 +67,7 @@ import { WorkspacePathOutsideRootError } from "./workspace/Services/WorkspacePat
 import { VcsStatusBroadcaster } from "./vcs/VcsStatusBroadcaster.ts";
 import { VcsProvisioningService } from "./vcs/VcsProvisioningService.ts";
 import { GitWorkflowService } from "./git/GitWorkflowService.ts";
-import { discoverProjectGitRepos } from "./git/projectRepoDiscovery.ts";
+import { discoverProjectGitRepos, fetchRepoRemotes } from "./git/projectRepoDiscovery.ts";
 import { createMultiRepoWorktrees, findExistingRepoWorktrees } from "./git/multiRepoWorktree.ts";
 import { buildSyntheticWorktreeParent } from "./git/projectWorktreeLayout.ts";
 import { ReviewService } from "./review/ReviewService.ts";
@@ -1119,22 +1119,37 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
               const repos = yield* Effect.promise(() =>
                 discoverProjectGitRepos(input.projectId, input.workspaceRoot),
               );
-              // List each repo's attachable branches (local branches not already
-              // checked out in a worktree — git allows a branch in one worktree
-              // only). Bounded parallelism; a repo that fails to list degrades to
-              // "no existing branches" rather than failing the whole discovery.
+              // Per repo: `git fetch` (so remote branches are fresh), then list
+              // branches. attachableBranches = local branches not checked out in
+              // a worktree (git allows a branch in one worktree only). remoteBranches
+              // = remote-only branches (no local counterpart) → selecting one creates
+              // a local tracking branch. Bounded parallelism; a repo that fails to
+              // list degrades to "no branches" rather than failing discovery.
               const repoBranchOptions = yield* Effect.forEach(
                 repos,
                 (repo) =>
-                  gitWorkflow.listRefs({ cwd: repo.rootPath }).pipe(
+                  Effect.promise(() => fetchRepoRemotes(repo.rootPath)).pipe(
+                    Effect.andThen(() => gitWorkflow.listRefs({ cwd: repo.rootPath })),
                     Effect.map((res) => {
                       const local = res.refs.filter((ref) => ref.isRemote !== true);
+                      const localNames = new Set(local.map((ref) => ref.name));
+                      const remoteLocalName = (ref: (typeof res.refs)[number]): string =>
+                        ref.remoteName && ref.name.startsWith(`${ref.remoteName}/`)
+                          ? ref.name.slice(ref.remoteName.length + 1)
+                          : ref.name;
                       return {
                         repoId: repo.id,
                         currentBranch: local.find((ref) => ref.current)?.name ?? null,
                         attachableBranches: local
                           .filter((ref) => ref.worktreePath === null)
                           .map((ref) => ref.name),
+                        // Remote refs whose local name has no local branch yet.
+                        // Require a "/" so the remote HEAD symref / bare remote
+                        // entries (e.g. "origin") are skipped.
+                        remoteBranches: res.refs
+                          .filter((ref) => ref.isRemote === true && ref.name.includes("/"))
+                          .map((ref) => ({ ref: ref.name, localName: remoteLocalName(ref) }))
+                          .filter((entry) => !localNames.has(entry.localName)),
                       };
                     }),
                     Effect.catchIf(
@@ -1144,6 +1159,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                           repoId: repo.id,
                           currentBranch: null,
                           attachableBranches: [] as ReadonlyArray<string>,
+                          remoteBranches: [] as ReadonlyArray<{ ref: string; localName: string }>,
                         }),
                     ),
                   ),

@@ -56,7 +56,9 @@ export function MultiRepoDialog({
   const [branchOptions, setBranchOptions] = useState<ReadonlyMap<string, RepoBranchOptions>>(
     new Map(),
   );
-  const [repoBranch, setRepoBranch] = useState<ReadonlyMap<string, string>>(new Map());
+  const [repoBranch, setRepoBranch] = useState<
+    ReadonlyMap<string, { mode: "existing" | "remote"; branch: string; baseRef?: string }>
+  >(new Map());
   // inSession ids include the always-present project root; count sub-repos only
   // so the summary reads "project root + N repos" without double-counting root.
   const inSessionSubCount = [...inSession].filter((id) => id !== rootRepo?.id).length;
@@ -112,17 +114,31 @@ export function MultiRepoDialog({
     });
   };
 
-  // value "" => create a new branch from HEAD; otherwise attach that existing branch.
+  // Select value encoding (git refnames can't contain ":", so "remote:" is a
+  // collision-safe prefix): "" => new branch; "remote:<ref>" => track that
+  // remote; anything else => attach that local branch.
   const setBranchChoice = (repoId: string, value: string) => {
     setRepoBranch((prev) => {
       const next = new Map(prev);
-      if (value) {
-        next.set(repoId, value);
-      } else {
+      if (!value) {
         next.delete(repoId);
+      } else if (value.startsWith("remote:")) {
+        const ref = value.slice("remote:".length);
+        const localName =
+          branchOptions.get(repoId)?.remoteBranches.find((rb) => rb.ref === ref)?.localName ?? ref;
+        next.set(repoId, { mode: "remote", branch: localName, baseRef: ref });
+      } else {
+        next.set(repoId, { mode: "existing", branch: value });
       }
       return next;
     });
+  };
+
+  // The select's current value, reconstructed from the stored choice.
+  const branchSelectValue = (repoId: string): string => {
+    const choice = repoBranch.get(repoId);
+    if (!choice) return "";
+    return choice.mode === "remote" ? `remote:${choice.baseRef}` : choice.branch;
   };
 
   const create = async () => {
@@ -139,13 +155,29 @@ export function MultiRepoDialog({
     // Always include the project root as the session base (auto-loads skills,
     // CLAUDE.md, .mcp.json) alongside the selected sub-repos.
     const chosen = rootRepo ? [rootRepo, ...chosenSubs] : chosenSubs;
-    // Per-repo branch decisions: a chosen sub-repo with an existing-branch
-    // selection attaches that branch; everything else creates the session branch
+    // Per-repo branch decisions: a chosen sub-repo can attach an existing local
+    // branch or track a remote one; everything else creates the session branch
     // from HEAD (omitted from repoRefs → backend default).
-    const repoRefs = chosenSubs
-      .map((repo) => ({ repoId: repo.id, branch: repoBranch.get(repo.id) ?? "" }))
-      .filter((ref) => ref.branch !== "")
-      .map((ref) => ({ repoId: ref.repoId, mode: "existing" as const, branch: ref.branch }));
+    const repoRefs: Array<{
+      repoId: string;
+      mode: "existing" | "remote";
+      branch: string;
+      baseRef?: string;
+    }> = [];
+    for (const repo of chosenSubs) {
+      const choice = repoBranch.get(repo.id);
+      if (!choice) continue;
+      repoRefs.push(
+        choice.mode === "remote"
+          ? {
+              repoId: repo.id,
+              mode: "remote",
+              branch: choice.branch,
+              ...(choice.baseRef ? { baseRef: choice.baseRef } : {}),
+            }
+          : { repoId: repo.id, mode: "existing", branch: choice.branch },
+      );
+    }
     const attachCount = repoRefs.length;
     setStatus(`Creating ${chosenSubs.length} worktree(s)…`);
     try {
@@ -168,7 +200,7 @@ export function MultiRepoDialog({
       setStatus(
         `Ready: ${chosenSubs.length} repo worktree(s) + project root` +
           (attachCount > 0
-            ? ` (${attachCount} on existing branch${attachCount === 1 ? "" : "es"})`
+            ? ` (${attachCount} on existing/remote branch${attachCount === 1 ? "" : "es"})`
             : "") +
           `, under ${result.parentPath}.`,
       );
@@ -256,7 +288,9 @@ export function MultiRepoDialog({
             ) : (
               <div className="max-h-56 space-y-1.5 overflow-y-auto">
                 {repos.map((repo) => {
-                  const attachable = branchOptions.get(repo.id)?.attachableBranches ?? [];
+                  const options = branchOptions.get(repo.id);
+                  const attachable = options?.attachableBranches ?? [];
+                  const remotes = options?.remoteBranches ?? [];
                   const isSelected = selected.has(repo.id);
                   return (
                     <div key={repo.id} className="space-y-1">
@@ -278,24 +312,38 @@ export function MultiRepoDialog({
                           </span>
                         ) : null}
                       </label>
-                      {/* Per-repo branch: default new branch, or attach one of the
-                          repo's existing (not-checked-out) branches. */}
-                      {isSelected && attachable.length > 0 ? (
+                      {/* Per-repo branch: default new branch, attach an existing
+                          local branch, or track a remote branch (creates a local
+                          tracking branch from origin/…). */}
+                      {isSelected && (attachable.length > 0 || remotes.length > 0) ? (
                         <div className="ml-6 flex items-center gap-1.5">
                           <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                             branch
                           </span>
                           <select
-                            value={repoBranch.get(repo.id) ?? ""}
+                            value={branchSelectValue(repo.id)}
                             onChange={(event) => setBranchChoice(repo.id, event.target.value)}
                             className="min-w-0 flex-1 rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs"
                           >
                             <option value="">New branch ({branch})</option>
-                            {attachable.map((name) => (
-                              <option key={name} value={name}>
-                                {name}
-                              </option>
-                            ))}
+                            {attachable.length > 0 ? (
+                              <optgroup label="Attach local branch">
+                                {attachable.map((name) => (
+                                  <option key={name} value={name}>
+                                    {name}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ) : null}
+                            {remotes.length > 0 ? (
+                              <optgroup label="Track remote (creates local branch)">
+                                {remotes.map((rb) => (
+                                  <option key={rb.ref} value={`remote:${rb.ref}`}>
+                                    {rb.ref}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ) : null}
                           </select>
                         </div>
                       ) : null}

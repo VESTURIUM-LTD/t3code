@@ -241,10 +241,22 @@ export type DiscoverProjectReposInput = typeof DiscoverProjectReposInput.Type;
 // repo's local branches that can be checked into a NEW worktree — i.e. not
 // already checked out anywhere (git allows a branch in only one worktree, so
 // the current branch and any worktree-held branches are excluded).
+// A remote-only branch: `ref` is the remote-tracking ref to branch from
+// (e.g. "origin/feature/x"); `localName` is the local branch that would be
+// created to track it (e.g. "feature/x").
+export const RepoRemoteBranch = Schema.Struct({
+  ref: TrimmedNonEmptyString,
+  localName: TrimmedNonEmptyString,
+});
+export type RepoRemoteBranch = typeof RepoRemoteBranch.Type;
+
 export const RepoBranchOptions = Schema.Struct({
   repoId: TrimmedNonEmptyString,
   currentBranch: Schema.NullOr(TrimmedNonEmptyString),
   attachableBranches: Schema.Array(TrimmedNonEmptyString),
+  // Remote-only branches (no local counterpart) — selecting one creates a
+  // local tracking branch from it.
+  remoteBranches: Schema.Array(RepoRemoteBranch),
 });
 export type RepoBranchOptions = typeof RepoBranchOptions.Type;
 
@@ -262,10 +274,13 @@ export type DiscoverProjectReposResult = typeof DiscoverProjectReposResult.Type;
 // Per-repo branch decision for session creation:
 //   mode "new"      -> create `branch` from baseBranch/HEAD (default behavior)
 //   mode "existing" -> attach the existing local `branch` into the worktree
+//   mode "remote"   -> create local `branch` tracking `baseRef` (e.g. origin/x)
 export const RepoWorktreeRef = Schema.Struct({
   repoId: TrimmedNonEmptyString,
-  mode: Schema.Literals(["new", "existing"]),
+  mode: Schema.Literals(["new", "existing", "remote"]),
   branch: TrimmedNonEmptyString,
+  // Required for mode "remote": the remote-tracking ref to branch from.
+  baseRef: Schema.optional(TrimmedNonEmptyString),
 });
 export type RepoWorktreeRef = typeof RepoWorktreeRef.Type;
 

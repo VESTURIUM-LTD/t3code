@@ -17,11 +17,13 @@ export interface CreateMultiRepoWorktreesInput {
   readonly baseBranch: string | null;
   readonly repos: ReadonlyArray<ProjectGitRepo>;
   // Optional per-repo branch decision. Repos without an entry create `branch`
-  // from baseBranch/HEAD; "existing" attaches the named branch into the worktree.
+  // from baseBranch/HEAD; "existing" attaches the named local branch; "remote"
+  // creates `branch` tracking `baseRef` (e.g. origin/x).
   readonly repoRefs?: ReadonlyArray<{
     readonly repoId: string;
-    readonly mode: "new" | "existing";
+    readonly mode: "new" | "existing" | "remote";
     readonly branch: string;
+    readonly baseRef?: string | undefined;
   }>;
 }
 
@@ -68,17 +70,20 @@ export const createMultiRepoWorktrees = Effect.fn("createMultiRepoWorktrees")(fu
       continue;
     }
     // Per-repo branch decision:
-    //   "existing" -> attach the named branch into the worktree (no -b)
-    //   "new"/none -> create the branch from baseBranch/HEAD (default)
+    //   "existing"   -> attach the named local branch into the worktree (no -b)
+    //   "remote"     -> create `branchName` tracking baseRef (git auto-tracks
+    //                   when branching from a remote ref like origin/x)
+    //   "new"/none   -> create `branchName` from baseBranch/HEAD (default)
     const ref = refByRepoId.get(entry.repoId);
     const branchName = ref?.branch ?? input.branch;
-    const attachExisting = ref?.mode === "existing";
-    const result = yield* gitWorkflow
-      .createWorktree(
-        attachExisting
+    const createArgs =
+      ref?.mode === "existing"
+        ? { cwd: entry.sourceRootPath, refName: branchName, path: entry.worktreePath }
+        : ref?.mode === "remote" && ref.baseRef
           ? {
               cwd: entry.sourceRootPath,
-              refName: branchName,
+              refName: ref.baseRef,
+              newRefName: branchName,
               path: entry.worktreePath,
             }
           : {
@@ -86,8 +91,9 @@ export const createMultiRepoWorktrees = Effect.fn("createMultiRepoWorktrees")(fu
               refName: input.baseBranch ?? "HEAD",
               newRefName: branchName,
               path: entry.worktreePath,
-            },
-      )
+            };
+    const result = yield* gitWorkflow
+      .createWorktree(createArgs)
       .pipe(
         // Recover from two failure modes (both for "new" collisions and for
         // "existing" branches whose prior worktree dir was removed):
