@@ -150,6 +150,8 @@ import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
 import { ChatHeader } from "./chat/ChatHeader";
+import { ThreadTasksPanel } from "./ThreadTasksPanel";
+import { countRunningTasks, deriveLiveTasks } from "./chat/threadTasks.logic";
 import { type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import { resolveEffectiveEnvMode, resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
@@ -866,6 +868,7 @@ export default function ChatView(props: ChatViewProps) {
   const [pendingUserInputQuestionIndexByRequestId, setPendingUserInputQuestionIndexByRequestId] =
     useState<Record<string, number>>({});
   const [planSidebarOpen, setPlanSidebarOpen] = useState(false);
+  const [tasksPanelOpen, setTasksPanelOpen] = useState(false);
   const shouldUsePlanSidebarSheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
   // Tracks whether the user explicitly dismissed the sidebar for the active turn.
   const planSidebarDismissedForTurnRef = useRef<string | null>(null);
@@ -1469,6 +1472,11 @@ export default function ChatView(props: ChatViewProps) {
   const selectedProvider: ProviderDriverKind = lockedProvider ?? unlockedSelectedProvider;
   const phase = derivePhase(activeThread?.session ?? null);
   const threadActivities = activeThread?.activities ?? EMPTY_ACTIVITIES;
+  // Live background-task count for the header badge (workflow/subagent/shell/monitor).
+  const runningTaskCount = useMemo(
+    () => countRunningTasks(deriveLiveTasks(threadActivities)),
+    [threadActivities],
+  );
   const workLogEntries = useMemo(
     () => deriveWorkLogEntries(threadActivities, activeLatestTurn?.turnId ?? undefined),
     [activeLatestTurn?.turnId, threadActivities],
@@ -2427,6 +2435,8 @@ export default function ChatView(props: ChatViewProps) {
     planSidebarDismissedForTurnRef.current =
       activePlan?.turnId ?? sidebarProposedPlan?.turnId ?? "__dismissed__";
   }, [activePlan?.turnId, sidebarProposedPlan?.turnId]);
+  const toggleTasksPanel = useCallback(() => setTasksPanelOpen((open) => !open), []);
+  const closeTasksPanel = useCallback(() => setTasksPanelOpen(false), []);
 
   const persistThreadSettingsForNextTurn = useCallback(
     async (input: {
@@ -3776,6 +3786,9 @@ export default function ChatView(props: ChatViewProps) {
           onDeleteProjectScript={deleteProjectScript}
           onToggleTerminal={toggleTerminalVisibility}
           onToggleDiff={onToggleDiff}
+          tasksPanelOpen={tasksPanelOpen}
+          runningTaskCount={runningTaskCount}
+          onToggleTasks={toggleTasksPanel}
         />
       </header>
 
@@ -3991,6 +4004,10 @@ export default function ChatView(props: ChatViewProps) {
             onClose={closePlanSidebar}
           />
         ) : null}
+        {/* Live background-tasks panel (workflows / subagents / shells / monitors) */}
+        {tasksPanelOpen && !shouldUsePlanSidebarSheet ? (
+          <ThreadTasksPanel activities={threadActivities} onClose={closeTasksPanel} />
+        ) : null}
       </div>
       {/* end horizontal flex container */}
 
@@ -4024,6 +4041,11 @@ export default function ChatView(props: ChatViewProps) {
             mode="sheet"
             onClose={closePlanSidebar}
           />
+        </RightPanelSheet>
+      ) : null}
+      {shouldUsePlanSidebarSheet ? (
+        <RightPanelSheet open={tasksPanelOpen} onClose={closeTasksPanel}>
+          <ThreadTasksPanel activities={threadActivities} mode="sheet" onClose={closeTasksPanel} />
         </RightPanelSheet>
       ) : null}
 
