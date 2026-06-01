@@ -1,9 +1,30 @@
 // @effect-diagnostics nodeBuiltinImport:off
+import { execFile } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import type { ProjectGitRepo } from "@t3tools/contracts";
+
+const execFileAsync = promisify(execFile);
+
+/**
+ * Best-effort `git fetch --prune` so the per-repo remote branch list is fresh
+ * during multi-repo discovery. Never throws — offline / no-remote / auth-prompt
+ * repos just keep whatever refs were last fetched. Bounded by a timeout so a
+ * hung fetch can't stall discovery.
+ */
+export async function fetchRepoRemotes(rootPath: string): Promise<void> {
+  try {
+    await execFileAsync("git", ["fetch", "--prune", "--no-tags"], {
+      cwd: rootPath,
+      timeout: 20_000,
+    });
+  } catch {
+    // offline / no remote / credential prompt — proceed with cached refs
+  }
+}
 
 // Ported from ashvinnihalani/t3code (local-only; SSH-remote discovery dropped for prototype).
 

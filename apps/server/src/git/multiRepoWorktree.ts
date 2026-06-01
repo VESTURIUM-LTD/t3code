@@ -16,6 +16,15 @@ export interface CreateMultiRepoWorktreesInput {
   readonly branch: string;
   readonly baseBranch: string | null;
   readonly repos: ReadonlyArray<ProjectGitRepo>;
+  // Optional per-repo branch decision. Repos without an entry create `branch`
+  // from baseBranch/HEAD; "existing" attaches the named local branch; "remote"
+  // creates `branch` tracking `baseRef` (e.g. origin/x).
+  readonly repoRefs?: ReadonlyArray<{
+    readonly repoId: string;
+    readonly mode: "new" | "existing" | "remote";
+    readonly branch: string;
+    readonly baseRef?: string | undefined;
+  }>;
 }
 
 /**
@@ -42,6 +51,10 @@ export const createMultiRepoWorktrees = Effect.fn("createMultiRepoWorktrees")(fu
     a.worktreePath === parentPath ? -1 : b.worktreePath === parentPath ? 1 : 0,
   );
 
+  // Per-repo branch decision (keyed by repoId). Repos without an entry default
+  // to a new `input.branch` from HEAD.
+  const refByRepoId = new Map((input.repoRefs ?? []).map((ref) => [ref.repoId, ref]));
+
   const created: ProjectRepoWorktree[] = [];
   for (const entry of ordered) {
     // Idempotent: if this repo's worktree already exists (re-click / retry on the
@@ -56,21 +69,40 @@ export const createMultiRepoWorktrees = Effect.fn("createMultiRepoWorktrees")(fu
       });
       continue;
     }
+    // Per-repo branch decision:
+    //   "existing"   -> attach the named local branch into the worktree (no -b)
+    //   "remote"     -> create `branchName` tracking baseRef (git auto-tracks
+    //                   when branching from a remote ref like origin/x)
+    //   "new"/none   -> create `branchName` from baseBranch/HEAD (default)
+    const ref = refByRepoId.get(entry.repoId);
+    const branchName = ref?.branch ?? input.branch;
+    const createArgs =
+      ref?.mode === "existing"
+        ? { cwd: entry.sourceRootPath, refName: branchName, path: entry.worktreePath }
+        : ref?.mode === "remote" && ref.baseRef
+          ? {
+              cwd: entry.sourceRootPath,
+              refName: ref.baseRef,
+              newRefName: branchName,
+              path: entry.worktreePath,
+            }
+          : {
+              cwd: entry.sourceRootPath,
+              refName: input.baseBranch ?? "HEAD",
+              newRefName: branchName,
+              path: entry.worktreePath,
+            };
     const result = yield* gitWorkflow
-      .createWorktree({
-        cwd: entry.sourceRootPath,
-        refName: input.baseBranch ?? "HEAD",
-        newRefName: input.branch,
-        path: entry.worktreePath,
-      })
+      .createWorktree(createArgs)
       .pipe(
-        // The per-session branch may already exist (orphaned after a prior
-        // worktree dir was removed). Two distinct failure modes:
+        // Recover from two failure modes (both for "new" collisions and for
+        // "existing" branches whose prior worktree dir was removed):
         //   "a branch named '<b>' already exists"        — branch lingers, free
-        //   "'<b>' is already used by worktree at <path>" — branch is still
-        //      registered to a worktree dir that no longer exists (stale).
+        //   "'<b>' is already used by worktree at <path>" — stale registration
         // `git worktree prune` clears the stale registration; afterwards the
-        // branch is free, so we attach it (omit newRefName) instead of failing.
+        // branch is free, so we attach it (refName only, no -b). If the branch
+        // is checked out in a LIVE worktree, this still fails — surfaced as a
+        // clear "already used by worktree" error.
         Effect.catchIf(
           (err) =>
             err.detail.includes("already exists") ||
@@ -89,7 +121,7 @@ export const createMultiRepoWorktrees = Effect.fn("createMultiRepoWorktrees")(fu
               Effect.andThen(() =>
                 gitWorkflow.createWorktree({
                   cwd: entry.sourceRootPath,
-                  refName: input.branch,
+                  refName: branchName,
                   path: entry.worktreePath,
                 }),
               ),
