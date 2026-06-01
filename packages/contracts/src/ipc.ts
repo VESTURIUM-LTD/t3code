@@ -39,6 +39,8 @@ import type {
   ServerSignalProcessResult,
   ServerTraceDiagnosticsResult,
   ServerUpsertKeybindingResult,
+  DiscoverProjectSlashCommandsInput,
+  DiscoverProjectSlashCommandsResult,
 } from "./server.ts";
 import type {
   TerminalAttachInput,
@@ -56,6 +58,10 @@ import type { ServerRemoveKeybindingInput, ServerUpsertKeybindingInput } from ".
 import * as Schema from "effect/Schema";
 import type {
   ClientOrchestrationCommand,
+  CreateMultiRepoWorktreeInput,
+  DiscoverProjectReposInput,
+  DiscoverProjectReposResult,
+  ThreadMultiRepoWorktree,
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetFullThreadDiffResult,
   OrchestrationGetTurnDiffInput,
@@ -539,6 +545,15 @@ export interface EnvironmentApi {
   vcs: {
     listRefs: (input: VcsListRefsInput) => Promise<VcsListRefsResult>;
     createWorktree: (input: VcsCreateWorktreeInput) => Promise<VcsCreateWorktreeResult>;
+    discoverProjectRepos?: (
+      input: DiscoverProjectReposInput,
+    ) => Promise<DiscoverProjectReposResult>;
+    discoverProjectSlashCommands?: (
+      input: DiscoverProjectSlashCommandsInput,
+    ) => Promise<DiscoverProjectSlashCommandsResult>;
+    createMultiRepoWorktree?: (
+      input: CreateMultiRepoWorktreeInput,
+    ) => Promise<ThreadMultiRepoWorktree>;
     removeWorktree: (input: VcsRemoveWorktreeInput) => Promise<void>;
     createRef: (input: VcsCreateRefInput) => Promise<VcsCreateRefResult>;
     switchRef: (input: VcsSwitchRefInput) => Promise<VcsSwitchRefResult>;

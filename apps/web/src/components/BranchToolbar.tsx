@@ -23,6 +23,7 @@ import {
   resolveLockedWorkspaceLabel,
 } from "./BranchToolbar.logic";
 import { BranchToolbarBranchSelector } from "./BranchToolbarBranchSelector";
+import { MultiRepoDialog } from "./MultiRepoDialog";
 import { BranchToolbarEnvironmentSelector } from "./BranchToolbarEnvironmentSelector";
 import { BranchToolbarEnvModeSelector } from "./BranchToolbarEnvModeSelector";
 import { Button } from "./ui/button";
@@ -222,6 +223,7 @@ export const BranchToolbar = memo(function BranchToolbar({
     [activeProjectRef],
   );
   const activeProject = useStore(activeProjectSelector);
+  const activeProjectId = serverThread?.projectId ?? draftThread?.projectId ?? null;
   const hasActiveThread = serverThread !== undefined || draftThread !== null;
   const activeWorktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
   const effectiveEnvMode =
@@ -273,6 +275,18 @@ export const BranchToolbar = memo(function BranchToolbar({
             activeWorktreePath={activeWorktreePath}
             onEnvModeChange={onEnvModeChange}
           />
+          {activeProjectId ? (
+            <MultiRepoDialog
+              // Remount per thread so the per-thread branch default + discovered
+              // repos re-derive instead of going stale across thread navigation.
+              key={threadId}
+              environmentId={environmentId}
+              projectId={activeProjectId}
+              threadId={threadId}
+              workspaceRoot={activeProject.cwd}
+              {...(draftId ? { draftId } : {})}
+            />
+          ) : null}
         </div>
       )}
 

@@ -325,6 +325,10 @@ export function projectEvent(
               : {}),
             ...(payload.branch !== undefined ? { branch: payload.branch } : {}),
             ...(payload.worktreePath !== undefined ? { worktreePath: payload.worktreePath } : {}),
+            ...(payload.repoBranches !== undefined ? { repoBranches: payload.repoBranches } : {}),
+            ...(payload.multiRepoWorktree !== undefined
+              ? { multiRepoWorktree: payload.multiRepoWorktree }
+              : {}),
             updatedAt: payload.updatedAt,
           }),
         })),

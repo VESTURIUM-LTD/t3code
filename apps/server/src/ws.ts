@@ -1,6 +1,7 @@
 import * as Cause from "effect/Cause";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
+import * as Cache from "effect/Cache";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -55,6 +56,7 @@ import {
 } from "./observability/RpcInstrumentation.ts";
 import { ProviderRegistry } from "./provider/Services/ProviderRegistry.ts";
 import * as ProviderMaintenanceRunner from "./provider/providerMaintenanceRunner.ts";
+import { probeClaudeSlashCommands } from "./provider/Layers/ClaudeProvider.ts";
 import { ServerLifecycleEvents } from "./serverLifecycleEvents.ts";
 import { ServerRuntimeStartup } from "./serverRuntimeStartup.ts";
 import { redactServerSettingsForClient, ServerSettingsService } from "./serverSettings.ts";
@@ -65,6 +67,9 @@ import { WorkspacePathOutsideRootError } from "./workspace/Services/WorkspacePat
 import { VcsStatusBroadcaster } from "./vcs/VcsStatusBroadcaster.ts";
 import { VcsProvisioningService } from "./vcs/VcsProvisioningService.ts";
 import { GitWorkflowService } from "./git/GitWorkflowService.ts";
+import { discoverProjectGitRepos } from "./git/projectRepoDiscovery.ts";
+import { createMultiRepoWorktrees, findExistingRepoWorktrees } from "./git/multiRepoWorktree.ts";
+import { buildSyntheticWorktreeParent } from "./git/projectWorktreeLayout.ts";
 import { ReviewService } from "./review/ReviewService.ts";
 import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptRunner.ts";
 import { RepositoryIdentityResolver } from "./project/Services/RepositoryIdentityResolver.ts";
@@ -178,6 +183,15 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       const terminalManager = yield* TerminalManager;
       const providerRegistry = yield* ProviderRegistry;
       const providerMaintenanceRunner = yield* ProviderMaintenanceRunner.ProviderMaintenanceRunner;
+      // Project-scoped slash-command palette: the cwd-aware Claude probe (~1-2s)
+      // is cached per cwd so repeated composer mounts / thread switches don't
+      // respawn it. Short TTL picks up newly-added skills/commands without a
+      // server restart.
+      const projectSlashCommandCache = yield* Cache.make({
+        capacity: 64,
+        timeToLive: Duration.minutes(2),
+        lookup: (cwd: string) => probeClaudeSlashCommands({ cwd }),
+      });
       const config = yield* ServerConfig;
       const lifecycleEvents = yield* ServerLifecycleEvents;
       const serverSettings = yield* ServerSettingsService;
@@ -1096,6 +1110,79 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
           observeRpcEffect(
             WS_METHODS.vcsCreateWorktree,
             gitWorkflow.createWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            { "rpc.aggregate": "vcs" },
+          ),
+        [WS_METHODS.vcsDiscoverProjectRepos]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.vcsDiscoverProjectRepos,
+            Effect.promise(() =>
+              discoverProjectGitRepos(input.projectId, input.workspaceRoot),
+            ).pipe(
+              Effect.map((repos) => ({
+                repos,
+                existingRepoIds:
+                  input.threadId && input.branch
+                    ? findExistingRepoWorktrees({
+                        worktreesDir: config.worktreesDir,
+                        threadId: input.threadId,
+                        branch: input.branch,
+                        repos,
+                      })
+                    : [],
+                sessionParentPath:
+                  input.threadId && input.branch
+                    ? buildSyntheticWorktreeParent({
+                        worktreesDir: config.worktreesDir,
+                        threadId: input.threadId,
+                        branch: input.branch,
+                      })
+                    : null,
+              })),
+            ),
+            { "rpc.aggregate": "vcs" },
+          ),
+        [WS_METHODS.vcsDiscoverProjectSlashCommands]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.vcsDiscoverProjectSlashCommands,
+            Cache.get(projectSlashCommandCache, input.cwd).pipe(
+              Effect.map((slashCommands) => ({ slashCommands })),
+            ),
+            { "rpc.aggregate": "vcs" },
+          ),
+        [WS_METHODS.vcsCreateMultiRepoWorktree]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.vcsCreateMultiRepoWorktree,
+            Effect.gen(function* () {
+              const result = yield* createMultiRepoWorktrees({
+                threadId: input.threadId,
+                branch: input.branch,
+                baseBranch: input.baseBranch,
+                repos: input.repos,
+              }).pipe(
+                Effect.provideService(GitWorkflowService, gitWorkflow),
+                Effect.provideService(ServerConfig, config),
+              );
+              // Best-effort: persist worktreePath = synthetic parent so the agent's
+              // cwd (resolveThreadWorkspaceCwd) points there and it sees every repo.
+              // Uses a unique commandId (no permanent-rejection poisoning) and is
+              // skipped silently when the thread isn't persisted yet (draft thread) —
+              // the worktrees are still created and returned regardless.
+              yield* orchestrationEngine
+                .dispatch({
+                  type: "thread.meta.update",
+                  commandId: CommandId.make(`server:multi-repo-worktree:${input.threadId}`),
+                  threadId: input.threadId,
+                  branch: input.branch,
+                  worktreePath: result.parentPath,
+                  multiRepoWorktree: result,
+                  repoBranches: input.repos.map((repo) => ({
+                    repoId: repo.id,
+                    branch: input.branch,
+                  })),
+                })
+                .pipe(Effect.ignore);
+              return result;
+            }),
             { "rpc.aggregate": "vcs" },
           ),
         [WS_METHODS.vcsRemoveWorktree]: (input) =>

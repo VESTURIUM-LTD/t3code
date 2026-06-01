@@ -335,6 +335,10 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
             : {}),
           ...(command.branch !== undefined ? { branch: command.branch } : {}),
           ...(command.worktreePath !== undefined ? { worktreePath: command.worktreePath } : {}),
+          ...(command.repoBranches !== undefined ? { repoBranches: command.repoBranches } : {}),
+          ...(command.multiRepoWorktree !== undefined
+            ? { multiRepoWorktree: command.multiRepoWorktree }
+            : {}),
           updatedAt: occurredAt,
         },
       };

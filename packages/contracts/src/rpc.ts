@@ -42,6 +42,10 @@ import {
 import { KeybindingsConfigError } from "./keybindings.ts";
 import {
   ClientOrchestrationCommand,
+  CreateMultiRepoWorktreeInput,
+  DiscoverProjectReposInput,
+  DiscoverProjectReposResult,
+  ThreadMultiRepoWorktree,
   ORCHESTRATION_WS_METHODS,
   OrchestrationDispatchCommandError,
   OrchestrationGetFullThreadDiffError,
@@ -93,6 +97,8 @@ import {
   ServerSignalProcessResult,
   ServerUpsertKeybindingInput,
   ServerUpsertKeybindingResult,
+  DiscoverProjectSlashCommandsInput,
+  DiscoverProjectSlashCommandsResult,
 } from "./server.ts";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "./settings.ts";
 import {
@@ -126,6 +132,9 @@ export const WS_METHODS = {
   vcsRefreshStatus: "vcs.refreshStatus",
   vcsListRefs: "vcs.listRefs",
   vcsCreateWorktree: "vcs.createWorktree",
+  vcsDiscoverProjectRepos: "vcs.discoverProjectRepos",
+  vcsDiscoverProjectSlashCommands: "vcs.discoverProjectSlashCommands",
+  vcsCreateMultiRepoWorktree: "vcs.createMultiRepoWorktree",
   vcsRemoveWorktree: "vcs.removeWorktree",
   vcsCreateRef: "vcs.createRef",
   vcsSwitchRef: "vcs.switchRef",
@@ -350,6 +359,27 @@ export const WsVcsCreateWorktreeRpc = Rpc.make(WS_METHODS.vcsCreateWorktree, {
   error: GitCommandError,
 });
 
+export const WsVcsDiscoverProjectReposRpc = Rpc.make(WS_METHODS.vcsDiscoverProjectRepos, {
+  payload: DiscoverProjectReposInput,
+  success: DiscoverProjectReposResult,
+  error: GitCommandError,
+});
+
+export const WsVcsDiscoverProjectSlashCommandsRpc = Rpc.make(
+  WS_METHODS.vcsDiscoverProjectSlashCommands,
+  {
+    payload: DiscoverProjectSlashCommandsInput,
+    success: DiscoverProjectSlashCommandsResult,
+    error: GitCommandError,
+  },
+);
+
+export const WsVcsCreateMultiRepoWorktreeRpc = Rpc.make(WS_METHODS.vcsCreateMultiRepoWorktree, {
+  payload: CreateMultiRepoWorktreeInput,
+  success: ThreadMultiRepoWorktree,
+  error: GitCommandError,
+});
+
 export const WsVcsRemoveWorktreeRpc = Rpc.make(WS_METHODS.vcsRemoveWorktree, {
   payload: VcsRemoveWorktreeInput,
   error: GitCommandError,
@@ -537,6 +567,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitPreparePullRequestThreadRpc,
   WsVcsListRefsRpc,
   WsVcsCreateWorktreeRpc,
+  WsVcsDiscoverProjectReposRpc,
+  WsVcsDiscoverProjectSlashCommandsRpc,
+  WsVcsCreateMultiRepoWorktreeRpc,
   WsVcsRemoveWorktreeRpc,
   WsVcsCreateRefRpc,
   WsVcsSwitchRefRpc,

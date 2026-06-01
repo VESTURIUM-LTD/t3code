@@ -80,6 +80,23 @@ export const ServerProviderSlashCommand = Schema.Struct({
 });
 export type ServerProviderSlashCommand = typeof ServerProviderSlashCommand.Type;
 
+// --- Project-scoped slash-command discovery (cwd-aware) ---
+// The per-instance provider snapshot lists only account/global slash commands
+// (its probe runs project-blind). Project-scoped commands (e.g. skills + custom
+// commands under a repo's `.claude/`) only surface when Claude is probed WITH
+// that project's cwd. This RPC runs that cwd-aware probe on demand so the
+// composer's `/` palette can include the active thread's project commands.
+export const DiscoverProjectSlashCommandsInput = Schema.Struct({
+  cwd: TrimmedNonEmptyString,
+});
+export type DiscoverProjectSlashCommandsInput = typeof DiscoverProjectSlashCommandsInput.Type;
+
+export const DiscoverProjectSlashCommandsResult = Schema.Struct({
+  slashCommands: Schema.Array(ServerProviderSlashCommand),
+});
+export type DiscoverProjectSlashCommandsResult =
+  typeof DiscoverProjectSlashCommandsResult.Type;
+
 export const ServerProviderSkill = Schema.Struct({
   name: TrimmedNonEmptyString,
   description: Schema.optional(TrimmedNonEmptyString),

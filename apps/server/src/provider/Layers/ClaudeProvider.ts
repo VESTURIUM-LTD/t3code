@@ -572,6 +572,58 @@ const probeClaudeCapabilities = (
   );
 };
 
+/**
+ * Project-scoped slash-command discovery.
+ *
+ * Runs the same lightweight init probe as {@link probeClaudeCapabilities} but
+ * WITH a `cwd`, so the returned commands include the project's skills + custom
+ * commands (e.g. `/wazuh` from a repo's `.claude/skills/`). The per-instance
+ * snapshot probe runs project-blind (no cwd) and therefore only sees account /
+ * user-level commands; this fills that gap for the composer's `/` palette.
+ *
+ * Returns `[]` on failure/timeout (graceful degradation — the palette simply
+ * falls back to the snapshot's account-level commands).
+ */
+export const probeClaudeSlashCommands = (input: {
+  readonly cwd: string;
+  readonly binaryPath?: string;
+  readonly environment?: NodeJS.ProcessEnv;
+}): Effect.Effect<ReadonlyArray<ServerProviderSlashCommand>> => {
+  const abort = new AbortController();
+  return Effect.tryPromise(async () => {
+    const q = claudeQuery({
+      // oxlint-disable-next-line require-yield
+      prompt: (async function* (): AsyncGenerator<SDKUserMessage> {
+        await waitForAbortSignal(abort.signal);
+      })(),
+      options: {
+        persistSession: false,
+        ...(input.binaryPath ? { pathToClaudeCodeExecutable: input.binaryPath } : {}),
+        abortController: abort,
+        settingSources: ["user", "project", "local"],
+        allowedTools: [],
+        cwd: input.cwd,
+        ...(input.environment ? { env: input.environment } : {}),
+        stderr: () => {},
+      },
+    });
+    const init = await q.initializationResult();
+    return parseClaudeInitializationCommands(init.commands);
+  }).pipe(
+    Effect.ensuring(
+      Effect.sync(() => {
+        if (!abort.signal.aborted) abort.abort();
+      }),
+    ),
+    Effect.timeoutOption(CAPABILITIES_PROBE_TIMEOUT_MS),
+    Effect.result,
+    Effect.map((result) => {
+      if (Result.isFailure(result)) return [];
+      return Option.isSome(result.success) ? result.success.value : [];
+    }),
+  );
+};
+
 const runClaudeCommand = Effect.fn("runClaudeCommand")(function* (
   claudeSettings: ClaudeSettings,
   args: ReadonlyArray<string>,

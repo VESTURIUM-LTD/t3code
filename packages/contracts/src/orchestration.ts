@@ -197,6 +197,63 @@ export const ProjectScript = Schema.Struct({
 });
 export type ProjectScript = typeof ProjectScript.Type;
 
+// --- Multi-repo support (ported from ashvinnihalani/t3code reference; local-only) ---
+export const ProjectGitRepo = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  rootPath: TrimmedNonEmptyString,
+  relativePath: TrimmedNonEmptyString,
+  displayName: TrimmedNonEmptyString,
+});
+export type ProjectGitRepo = typeof ProjectGitRepo.Type;
+
+export const ProjectRepoWorktree = Schema.Struct({
+  repoId: TrimmedNonEmptyString,
+  repoRelativePath: TrimmedNonEmptyString,
+  sourceRootPath: TrimmedNonEmptyString,
+  worktreePath: TrimmedNonEmptyString,
+});
+export type ProjectRepoWorktree = typeof ProjectRepoWorktree.Type;
+
+export const ThreadRepoBranch = Schema.Struct({
+  repoId: TrimmedNonEmptyString,
+  branch: Schema.NullOr(TrimmedNonEmptyString),
+});
+export type ThreadRepoBranch = typeof ThreadRepoBranch.Type;
+
+export const ThreadMultiRepoWorktree = Schema.Struct({
+  parentPath: TrimmedNonEmptyString,
+  repos: Schema.Array(ProjectRepoWorktree),
+});
+export type ThreadMultiRepoWorktree = typeof ThreadMultiRepoWorktree.Type;
+
+// --- Multi-repo WS RPC payloads ---
+export const DiscoverProjectReposInput = Schema.Struct({
+  projectId: TrimmedNonEmptyString,
+  workspaceRoot: TrimmedNonEmptyString,
+  // Optional thread context: when provided, the result flags which repos
+  // already have a worktree in this thread's multi-repo session.
+  threadId: Schema.optional(ThreadId),
+  branch: Schema.optional(TrimmedNonEmptyString),
+});
+export type DiscoverProjectReposInput = typeof DiscoverProjectReposInput.Type;
+
+export const DiscoverProjectReposResult = Schema.Struct({
+  repos: Schema.Array(ProjectGitRepo),
+  // Repo ids that already have a worktree under the thread's session parent.
+  existingRepoIds: Schema.Array(TrimmedNonEmptyString),
+  // The session base dir for the given thread+branch (null when not provided).
+  sessionParentPath: Schema.NullOr(TrimmedNonEmptyString),
+});
+export type DiscoverProjectReposResult = typeof DiscoverProjectReposResult.Type;
+
+export const CreateMultiRepoWorktreeInput = Schema.Struct({
+  threadId: ThreadId,
+  branch: TrimmedNonEmptyString,
+  baseBranch: Schema.NullOr(TrimmedNonEmptyString),
+  repos: Schema.Array(ProjectGitRepo),
+});
+export type CreateMultiRepoWorktreeInput = typeof CreateMultiRepoWorktreeInput.Type;
+
 export const OrchestrationProject = Schema.Struct({
   id: ProjectId,
   title: TrimmedNonEmptyString,
@@ -204,6 +261,7 @@ export const OrchestrationProject = Schema.Struct({
   repositoryIdentity: Schema.optional(Schema.NullOr(RepositoryIdentity)),
   defaultModelSelection: Schema.NullOr(ModelSelection),
   scripts: Schema.Array(ProjectScript),
+  gitRepos: Schema.optional(Schema.Array(ProjectGitRepo)),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   deletedAt: Schema.NullOr(IsoDateTime),
@@ -341,6 +399,8 @@ export const OrchestrationThread = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  repoBranches: Schema.optional(Schema.Array(ThreadRepoBranch)),
+  multiRepoWorktree: Schema.optional(Schema.NullOr(ThreadMultiRepoWorktree)),
   latestTurn: Schema.NullOr(OrchestrationLatestTurn),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -371,6 +431,7 @@ export const OrchestrationProjectShell = Schema.Struct({
   repositoryIdentity: Schema.optional(Schema.NullOr(RepositoryIdentity)),
   defaultModelSelection: Schema.NullOr(ModelSelection),
   scripts: Schema.Array(ProjectScript),
+  gitRepos: Schema.optional(Schema.Array(ProjectGitRepo)),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
@@ -387,6 +448,8 @@ export const OrchestrationThreadShell = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  repoBranches: Schema.optional(Schema.Array(ThreadRepoBranch)),
+  multiRepoWorktree: Schema.optional(Schema.NullOr(ThreadMultiRepoWorktree)),
   latestTurn: Schema.NullOr(OrchestrationLatestTurn),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -521,6 +584,8 @@ const ThreadMetaUpdateCommand = Schema.Struct({
   modelSelection: Schema.optional(ModelSelection),
   branch: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+  repoBranches: Schema.optional(Schema.Array(ThreadRepoBranch)),
+  multiRepoWorktree: Schema.optional(Schema.NullOr(ThreadMultiRepoWorktree)),
 });
 
 const ThreadRuntimeModeSetCommand = Schema.Struct({
@@ -861,6 +926,8 @@ export const ThreadMetaUpdatedPayload = Schema.Struct({
   modelSelection: Schema.optional(ModelSelection),
   branch: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+  repoBranches: Schema.optional(Schema.Array(ThreadRepoBranch)),
+  multiRepoWorktree: Schema.optional(Schema.NullOr(ThreadMultiRepoWorktree)),
   updatedAt: IsoDateTime,
 });
 

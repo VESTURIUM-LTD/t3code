@@ -77,6 +77,8 @@ const rpcClientMock = {
     ),
     listRefs: vi.fn(),
     createWorktree: vi.fn(),
+    discoverProjectRepos: vi.fn(),
+    createMultiRepoWorktree: vi.fn(),
     removeWorktree: vi.fn(),
     createRef: vi.fn(),
     switchRef: vi.fn(),
