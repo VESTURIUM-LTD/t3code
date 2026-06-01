@@ -9,7 +9,7 @@ import { scopeThreadRef } from "@t3tools/client-runtime";
 import { memo } from "react";
 import GitActionsControl from "../GitActionsControl";
 import { type DraftId } from "~/composerDraftStore";
-import { DiffIcon, TerminalSquareIcon } from "lucide-react";
+import { DiffIcon, TerminalSquareIcon, WorkflowIcon } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import ProjectScriptsControl, { type NewProjectScriptInput } from "../ProjectScriptsControl";
@@ -42,6 +42,9 @@ interface ChatHeaderProps {
   onDeleteProjectScript: (scriptId: string) => Promise<void>;
   onToggleTerminal: () => void;
   onToggleDiff: () => void;
+  tasksPanelOpen: boolean;
+  runningTaskCount: number;
+  onToggleTasks: () => void;
 }
 
 export function shouldShowOpenInPicker(input: {
@@ -80,6 +83,9 @@ export const ChatHeader = memo(function ChatHeader({
   onDeleteProjectScript,
   onToggleTerminal,
   onToggleDiff,
+  tasksPanelOpen,
+  runningTaskCount,
+  onToggleTasks,
 }: ChatHeaderProps) {
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const showOpenInPicker = shouldShowOpenInPicker({
@@ -184,6 +190,32 @@ export const ChatHeader = memo(function ChatHeader({
               : diffToggleShortcutLabel
                 ? `Toggle diff panel (${diffToggleShortcutLabel})`
                 : "Toggle diff panel"}
+          </TooltipPopup>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Toggle
+                className="relative shrink-0"
+                pressed={tasksPanelOpen}
+                onPressedChange={onToggleTasks}
+                aria-label="Toggle tasks panel"
+                variant="outline"
+                size="xs"
+              >
+                <WorkflowIcon className="size-3" />
+                {runningTaskCount > 0 ? (
+                  <span className="absolute -right-1 -top-1 flex min-w-3.5 items-center justify-center rounded-full bg-blue-500 px-1 text-[9px] font-semibold leading-none text-white">
+                    {runningTaskCount}
+                  </span>
+                ) : null}
+              </Toggle>
+            }
+          />
+          <TooltipPopup side="bottom">
+            {runningTaskCount > 0
+              ? `${runningTaskCount} running background task${runningTaskCount === 1 ? "" : "s"} — toggle tasks panel`
+              : "Toggle tasks panel (workflows, subagents, shells, monitors)"}
           </TooltipPopup>
         </Tooltip>
       </div>
