@@ -7,6 +7,7 @@ import type {
   ProjectGitRepo,
   ProjectId,
   ProjectRepoWorktree,
+  RepoBranchOptions,
   ThreadId,
 } from "@t3tools/contracts";
 
@@ -50,6 +51,12 @@ export function MultiRepoDialog({
   const [inSession, setInSession] = useState<ReadonlySet<string>>(new Set());
   const [rootRepo, setRootRepo] = useState<ProjectGitRepo | null>(null);
   const [sessionPath, setSessionPath] = useState<string | null>(null);
+  // Per-repo branch options from discovery (repoId -> options) and the user's
+  // per-repo choice (repoId -> existing branch to attach; absent = new branch).
+  const [branchOptions, setBranchOptions] = useState<ReadonlyMap<string, RepoBranchOptions>>(
+    new Map(),
+  );
+  const [repoBranch, setRepoBranch] = useState<ReadonlyMap<string, string>>(new Map());
   // inSession ids include the always-present project root; count sub-repos only
   // so the summary reads "project root + N repos" without double-counting root.
   const inSessionSubCount = [...inSession].filter((id) => id !== rootRepo?.id).length;
@@ -77,6 +84,7 @@ export function MultiRepoDialog({
       setRepos(list);
       setInSession(existing);
       setSessionPath(result.sessionParentPath);
+      setBranchOptions(new Map(result.repoBranchOptions.map((option) => [option.repoId, option])));
       // Pre-select repos already in this session; a fresh session starts with none
       // selected so you pick deliberately instead of unchecking everything.
       setSelected(new Set(list.filter((repo) => existing.has(repo.id)).map((repo) => repo.id)));
@@ -104,6 +112,19 @@ export function MultiRepoDialog({
     });
   };
 
+  // value "" => create a new branch from HEAD; otherwise attach that existing branch.
+  const setBranchChoice = (repoId: string, value: string) => {
+    setRepoBranch((prev) => {
+      const next = new Map(prev);
+      if (value) {
+        next.set(repoId, value);
+      } else {
+        next.delete(repoId);
+      }
+      return next;
+    });
+  };
+
   const create = async () => {
     const api = readEnvironmentApi(environmentId);
     if (!api?.vcs.createMultiRepoWorktree) {
@@ -118,6 +139,14 @@ export function MultiRepoDialog({
     // Always include the project root as the session base (auto-loads skills,
     // CLAUDE.md, .mcp.json) alongside the selected sub-repos.
     const chosen = rootRepo ? [rootRepo, ...chosenSubs] : chosenSubs;
+    // Per-repo branch decisions: a chosen sub-repo with an existing-branch
+    // selection attaches that branch; everything else creates the session branch
+    // from HEAD (omitted from repoRefs → backend default).
+    const repoRefs = chosenSubs
+      .map((repo) => ({ repoId: repo.id, branch: repoBranch.get(repo.id) ?? "" }))
+      .filter((ref) => ref.branch !== "")
+      .map((ref) => ({ repoId: ref.repoId, mode: "existing" as const, branch: ref.branch }));
+    const attachCount = repoRefs.length;
     setStatus(`Creating ${chosenSubs.length} worktree(s)…`);
     try {
       const result = await api.vcs.createMultiRepoWorktree({
@@ -125,6 +154,7 @@ export function MultiRepoDialog({
         branch,
         baseBranch: null,
         repos: chosen,
+        repoRefs,
       });
       setCreated(result.repos.filter((worktree) => worktree.repoRelativePath !== "."));
       setInSession((prev) => new Set([...prev, ...chosen.map((repo) => repo.id)]));
@@ -136,7 +166,11 @@ export function MultiRepoDialog({
         envMode: "worktree",
       });
       setStatus(
-        `Ready: ${chosenSubs.length} repo worktree(s) + project root, under ${result.parentPath}.`,
+        `Ready: ${chosenSubs.length} repo worktree(s) + project root` +
+          (attachCount > 0
+            ? ` (${attachCount} on existing branch${attachCount === 1 ? "" : "es"})`
+            : "") +
+          `, under ${result.parentPath}.`,
       );
     } catch (error) {
       setStatus(`Worktree creation failed: ${String(error)}`);
@@ -220,27 +254,54 @@ export function MultiRepoDialog({
             {repos.length === 0 ? (
               <p className="text-sm text-muted-foreground">No repositories discovered yet.</p>
             ) : (
-              <div className="max-h-48 space-y-1 overflow-y-auto">
-                {repos.map((repo) => (
-                  <label key={repo.id} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={selected.has(repo.id)}
-                      onChange={() => toggle(repo.id)}
-                    />
-                    <span className="truncate font-medium">{repo.displayName}</span>
-                    {repo.relativePath !== repo.displayName ? (
-                      <span className="truncate text-xs text-muted-foreground">
-                        {repo.relativePath}
-                      </span>
-                    ) : null}
-                    {inSession.has(repo.id) ? (
-                      <span className="ml-auto shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                        in session
-                      </span>
-                    ) : null}
-                  </label>
-                ))}
+              <div className="max-h-56 space-y-1.5 overflow-y-auto">
+                {repos.map((repo) => {
+                  const attachable = branchOptions.get(repo.id)?.attachableBranches ?? [];
+                  const isSelected = selected.has(repo.id);
+                  return (
+                    <div key={repo.id} className="space-y-1">
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggle(repo.id)}
+                        />
+                        <span className="truncate font-medium">{repo.displayName}</span>
+                        {repo.relativePath !== repo.displayName ? (
+                          <span className="truncate text-xs text-muted-foreground">
+                            {repo.relativePath}
+                          </span>
+                        ) : null}
+                        {inSession.has(repo.id) ? (
+                          <span className="ml-auto shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                            in session
+                          </span>
+                        ) : null}
+                      </label>
+                      {/* Per-repo branch: default new branch, or attach one of the
+                          repo's existing (not-checked-out) branches. */}
+                      {isSelected && attachable.length > 0 ? (
+                        <div className="ml-6 flex items-center gap-1.5">
+                          <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            branch
+                          </span>
+                          <select
+                            value={repoBranch.get(repo.id) ?? ""}
+                            onChange={(event) => setBranchChoice(repo.id, event.target.value)}
+                            className="min-w-0 flex-1 rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs"
+                          >
+                            <option value="">New branch ({branch})</option>
+                            {attachable.map((name) => (
+                              <option key={name} value={name}>
+                                {name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

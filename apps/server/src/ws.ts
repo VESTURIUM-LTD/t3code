@@ -1115,10 +1115,41 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
         [WS_METHODS.vcsDiscoverProjectRepos]: (input) =>
           observeRpcEffect(
             WS_METHODS.vcsDiscoverProjectRepos,
-            Effect.promise(() =>
-              discoverProjectGitRepos(input.projectId, input.workspaceRoot),
-            ).pipe(
-              Effect.map((repos) => ({
+            Effect.gen(function* () {
+              const repos = yield* Effect.promise(() =>
+                discoverProjectGitRepos(input.projectId, input.workspaceRoot),
+              );
+              // List each repo's attachable branches (local branches not already
+              // checked out in a worktree — git allows a branch in one worktree
+              // only). Bounded parallelism; a repo that fails to list degrades to
+              // "no existing branches" rather than failing the whole discovery.
+              const repoBranchOptions = yield* Effect.forEach(
+                repos,
+                (repo) =>
+                  gitWorkflow.listRefs({ cwd: repo.rootPath }).pipe(
+                    Effect.map((res) => {
+                      const local = res.refs.filter((ref) => ref.isRemote !== true);
+                      return {
+                        repoId: repo.id,
+                        currentBranch: local.find((ref) => ref.current)?.name ?? null,
+                        attachableBranches: local
+                          .filter((ref) => ref.worktreePath === null)
+                          .map((ref) => ref.name),
+                      };
+                    }),
+                    Effect.catchIf(
+                      (): boolean => true,
+                      () =>
+                        Effect.succeed({
+                          repoId: repo.id,
+                          currentBranch: null,
+                          attachableBranches: [] as ReadonlyArray<string>,
+                        }),
+                    ),
+                  ),
+                { concurrency: 8 },
+              );
+              return {
                 repos,
                 existingRepoIds:
                   input.threadId && input.branch
@@ -1137,8 +1168,9 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                         branch: input.branch,
                       })
                     : null,
-              })),
-            ),
+                repoBranchOptions,
+              };
+            }),
             { "rpc.aggregate": "vcs" },
           ),
         [WS_METHODS.vcsDiscoverProjectSlashCommands]: (input) =>
@@ -1158,9 +1190,15 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                 branch: input.branch,
                 baseBranch: input.baseBranch,
                 repos: input.repos,
+                ...(input.repoRefs ? { repoRefs: input.repoRefs } : {}),
               }).pipe(
                 Effect.provideService(GitWorkflowService, gitWorkflow),
                 Effect.provideService(ServerConfig, config),
+              );
+              // The actual branch checked out per repo (per-repo override, else
+              // the shared session branch) — persisted on the thread.
+              const branchByRepoId = new Map(
+                (input.repoRefs ?? []).map((ref) => [ref.repoId, ref.branch]),
               );
               // Best-effort: persist worktreePath = synthetic parent so the agent's
               // cwd (resolveThreadWorkspaceCwd) points there and it sees every repo.
@@ -1177,7 +1215,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                   multiRepoWorktree: result,
                   repoBranches: input.repos.map((repo) => ({
                     repoId: repo.id,
-                    branch: input.branch,
+                    branch: branchByRepoId.get(repo.id) ?? input.branch,
                   })),
                 })
                 .pipe(Effect.ignore);

@@ -237,20 +237,46 @@ export const DiscoverProjectReposInput = Schema.Struct({
 });
 export type DiscoverProjectReposInput = typeof DiscoverProjectReposInput.Type;
 
+// Per-repo branch options for the create dialog. `attachableBranches` are the
+// repo's local branches that can be checked into a NEW worktree — i.e. not
+// already checked out anywhere (git allows a branch in only one worktree, so
+// the current branch and any worktree-held branches are excluded).
+export const RepoBranchOptions = Schema.Struct({
+  repoId: TrimmedNonEmptyString,
+  currentBranch: Schema.NullOr(TrimmedNonEmptyString),
+  attachableBranches: Schema.Array(TrimmedNonEmptyString),
+});
+export type RepoBranchOptions = typeof RepoBranchOptions.Type;
+
 export const DiscoverProjectReposResult = Schema.Struct({
   repos: Schema.Array(ProjectGitRepo),
   // Repo ids that already have a worktree under the thread's session parent.
   existingRepoIds: Schema.Array(TrimmedNonEmptyString),
   // The session base dir for the given thread+branch (null when not provided).
   sessionParentPath: Schema.NullOr(TrimmedNonEmptyString),
+  // Branch options per repo (id-keyed) so the dialog can offer existing branches.
+  repoBranchOptions: Schema.Array(RepoBranchOptions),
 });
 export type DiscoverProjectReposResult = typeof DiscoverProjectReposResult.Type;
+
+// Per-repo branch decision for session creation:
+//   mode "new"      -> create `branch` from baseBranch/HEAD (default behavior)
+//   mode "existing" -> attach the existing local `branch` into the worktree
+export const RepoWorktreeRef = Schema.Struct({
+  repoId: TrimmedNonEmptyString,
+  mode: Schema.Literals(["new", "existing"]),
+  branch: TrimmedNonEmptyString,
+});
+export type RepoWorktreeRef = typeof RepoWorktreeRef.Type;
 
 export const CreateMultiRepoWorktreeInput = Schema.Struct({
   threadId: ThreadId,
   branch: TrimmedNonEmptyString,
   baseBranch: Schema.NullOr(TrimmedNonEmptyString),
   repos: Schema.Array(ProjectGitRepo),
+  // Optional per-repo branch decisions (keyed by repoId). Repos without an
+  // entry fall back to creating `branch` from HEAD (backward compatible).
+  repoRefs: Schema.optional(Schema.Array(RepoWorktreeRef)),
 });
 export type CreateMultiRepoWorktreeInput = typeof CreateMultiRepoWorktreeInput.Type;
 
