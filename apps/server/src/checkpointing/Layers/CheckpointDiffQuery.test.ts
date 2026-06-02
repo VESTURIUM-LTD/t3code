@@ -1,8 +1,14 @@
+// @effect-diagnostics nodeBuiltinImport:off
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import nodePath from "node:path";
+
 import { CheckpointRef, ProjectId, ThreadId, TurnId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   ProjectionSnapshotQuery,
@@ -40,7 +46,57 @@ function makeThreadCheckpointContext(input: {
   };
 }
 
+const GIT_ENV = {
+  GIT_AUTHOR_NAME: "t3-test",
+  GIT_AUTHOR_EMAIL: "t3-test@example.com",
+  GIT_COMMITTER_NAME: "t3-test",
+  GIT_COMMITTER_EMAIL: "t3-test@example.com",
+};
+function git(cwd: string, ...args: string[]): void {
+  execFileSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, ...GIT_ENV } });
+}
+
+const tempDirs: string[] = [];
+
+/**
+ * Builds a minimal multi-repo session (root repo + one sub-repo) where the
+ * sub-repo has work COMMITTED on a `sess` branch forked from `main`. Returns the
+ * session parent path. The aggregator surfaces the committed change; the
+ * single-repo checkpoint path would not.
+ */
+function buildMultiRepoSessionWithCommittedSubRepoWork(marker: string): string {
+  const base = mkdtempSync(nodePath.join(tmpdir(), "t3-turndiff-"));
+  tempDirs.push(base);
+  const session = nodePath.join(base, "session");
+
+  mkdirSync(session, { recursive: true });
+  git(session, "init", "-q", "-b", "main");
+  writeFileSync(nodePath.join(session, "root.txt"), "root v1\n");
+  writeFileSync(nodePath.join(session, ".gitignore"), "subA/\n");
+  git(session, "add", "-A");
+  git(session, "commit", "-q", "-m", "seed root");
+
+  const subA = nodePath.join(session, "subA");
+  mkdirSync(subA, { recursive: true });
+  git(subA, "init", "-q", "-b", "main");
+  writeFileSync(nodePath.join(subA, "a.txt"), "a v1\n");
+  git(subA, "add", "-A");
+  git(subA, "commit", "-q", "-m", "seed subA");
+  git(subA, "checkout", "-q", "-b", "sess");
+  writeFileSync(nodePath.join(subA, "a.txt"), `a v2 ${marker}\n`);
+  git(subA, "add", "-A");
+  git(subA, "commit", "-q", "-m", "feat: agent change");
+
+  return session;
+}
+
 describe("CheckpointDiffQueryLive", () => {
+  afterEach(() => {
+    while (tempDirs.length > 0) {
+      rmSync(tempDirs.pop()!, { recursive: true, force: true });
+    }
+  });
+
   it("uses the narrow full-thread context lookup for all-turns diffs", async () => {
     const projectId = ProjectId.make("project-full-thread");
     const threadId = ThreadId.make("thread-full-thread");
@@ -366,6 +422,73 @@ describe("CheckpointDiffQueryLive", () => {
     );
 
     expect(hasCheckpointRefCallCount).toBe(0);
+  });
+
+  it("multi-repo: getTurnDiff returns the aggregated cross-repo diff, not the checkpoint diff", async () => {
+    const projectId = ProjectId.make("project-multi-turn");
+    const threadId = ThreadId.make("thread-multi-turn");
+    const toCheckpointRef = checkpointRefForThreadTurn(threadId, 1);
+    const session = buildMultiRepoSessionWithCommittedSubRepoWork("committed-sub-repo-change");
+
+    let diffCheckpointsCalled = false;
+    const threadCheckpointContext = makeThreadCheckpointContext({
+      projectId,
+      threadId,
+      workspaceRoot: session,
+      worktreePath: session,
+      checkpointTurnCount: 1,
+      checkpointRef: toCheckpointRef,
+    });
+
+    const checkpointStore: CheckpointStoreShape = {
+      isGitRepository: () => Effect.succeed(true),
+      captureCheckpoint: () => Effect.void,
+      hasCheckpointRef: () => Effect.succeed(true),
+      restoreCheckpoint: () => Effect.succeed(true),
+      diffCheckpoints: () =>
+        Effect.sync(() => {
+          diffCheckpointsCalled = true;
+          return "ROOT ONLY CHECKPOINT DIFF";
+        }),
+      deleteCheckpointRefs: () => Effect.void,
+    };
+
+    const layer = CheckpointDiffQueryLive.pipe(
+      Layer.provideMerge(Layer.succeed(CheckpointStore, checkpointStore)),
+      Layer.provideMerge(
+        Layer.succeed(ProjectionSnapshotQuery, {
+          getCommandReadModel: () => Effect.die("unused"),
+          getSnapshot: () => Effect.die("unused"),
+          getShellSnapshot: () => Effect.die("unused"),
+          getArchivedShellSnapshot: () => Effect.die("unused"),
+          getSnapshotSequence: () => Effect.succeed({ snapshotSequence: 0 }),
+          getCounts: () => Effect.succeed({ projectCount: 0, threadCount: 0 }),
+          getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
+          getProjectShellById: () => Effect.succeed(Option.none()),
+          getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
+          getThreadCheckpointContext: () => Effect.succeed(Option.some(threadCheckpointContext)),
+          getFullThreadDiffContext: () => Effect.die("unused"),
+          getThreadShellById: () => Effect.succeed(Option.none()),
+          getThreadDetailById: () => Effect.succeed(Option.none()),
+        }),
+      ),
+    );
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const query = yield* CheckpointDiffQuery;
+        return yield* query.getTurnDiff({
+          threadId,
+          fromTurnCount: 0,
+          toTurnCount: 1,
+          ignoreWhitespace: true,
+        });
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(result.diff).toContain("committed-sub-repo-change");
+    expect(result.diff).toContain("subA/a.txt");
+    expect(diffCheckpointsCalled).toBe(false);
   });
 
   it("fails when the thread is missing from the snapshot", async () => {
