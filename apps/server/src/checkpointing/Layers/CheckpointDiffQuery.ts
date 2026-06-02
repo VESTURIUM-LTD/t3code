@@ -10,6 +10,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
+import { aggregatedMultiRepoWorkingTreeDiff } from "../../git/multiRepoDiff.ts";
 import { ProjectionSnapshotQuery } from "../../orchestration/Services/ProjectionSnapshotQuery.ts";
 import { CheckpointInvariantError, CheckpointUnavailableError } from "../Errors.ts";
 import { checkpointRefForThreadTurn } from "../Utils.ts";
@@ -201,6 +202,27 @@ const make = Effect.gen(function* () {
         operation,
         detail: `Workspace path missing for thread '${input.threadId}' when computing full thread diff.`,
       });
+    }
+
+    // Multi-repo sessions: the checkpoint diff only covers the root worktree
+    // (sub-repos are separate, gitignored repos that are never checkpointed).
+    // Aggregate the working-tree diff across every repo worktree instead.
+    // Returns null for single-repo threads → fall through to the checkpoint diff.
+    const multiRepoDiff = yield* Effect.promise(() =>
+      aggregatedMultiRepoWorkingTreeDiff(workspaceCwd),
+    ).pipe(Effect.withSpan("checkpoint.fullThread.multiRepoWorkingTreeDiff"));
+    if (multiRepoDiff !== null) {
+      const aggregated = buildTurnDiffResult(
+        { threadId: input.threadId, fromTurnCount: 0, toTurnCount: input.toTurnCount },
+        multiRepoDiff,
+      );
+      if (!isTurnDiffResult(aggregated)) {
+        return yield* new CheckpointInvariantError({
+          operation,
+          detail: "Computed multi-repo full thread diff result does not satisfy contract schema.",
+        });
+      }
+      return aggregated satisfies OrchestrationGetFullThreadDiffResult;
     }
 
     if (!threadContext.value.toCheckpointRef) {
