@@ -67,7 +67,11 @@ import { WorkspacePathOutsideRootError } from "./workspace/Services/WorkspacePat
 import { VcsStatusBroadcaster } from "./vcs/VcsStatusBroadcaster.ts";
 import { VcsProvisioningService } from "./vcs/VcsProvisioningService.ts";
 import { GitWorkflowService } from "./git/GitWorkflowService.ts";
-import { discoverProjectGitRepos, fetchRepoRemotes } from "./git/projectRepoDiscovery.ts";
+import {
+  discoverProjectGitRepos,
+  fetchRepoRemotes,
+  resolveDefaultRemoteRef,
+} from "./git/projectRepoDiscovery.ts";
 import { createMultiRepoWorktrees, findExistingRepoWorktrees } from "./git/multiRepoWorktree.ts";
 import { buildSyntheticWorktreeParent } from "./git/projectWorktreeLayout.ts";
 import { ReviewService } from "./review/ReviewService.ts";
@@ -1128,30 +1132,36 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
               const repoBranchOptions = yield* Effect.forEach(
                 repos,
                 (repo) =>
-                  Effect.promise(() => fetchRepoRemotes(repo.rootPath)).pipe(
-                    Effect.andThen(() => gitWorkflow.listRefs({ cwd: repo.rootPath })),
-                    Effect.map((res) => {
-                      const local = res.refs.filter((ref) => ref.isRemote !== true);
-                      const localNames = new Set(local.map((ref) => ref.name));
-                      const remoteLocalName = (ref: (typeof res.refs)[number]): string =>
-                        ref.remoteName && ref.name.startsWith(`${ref.remoteName}/`)
-                          ? ref.name.slice(ref.remoteName.length + 1)
-                          : ref.name;
-                      return {
-                        repoId: repo.id,
-                        currentBranch: local.find((ref) => ref.current)?.name ?? null,
-                        attachableBranches: local
-                          .filter((ref) => ref.worktreePath === null)
-                          .map((ref) => ref.name),
-                        // Remote refs whose local name has no local branch yet.
-                        // Require a "/" so the remote HEAD symref / bare remote
-                        // entries (e.g. "origin") are skipped.
-                        remoteBranches: res.refs
-                          .filter((ref) => ref.isRemote === true && ref.name.includes("/"))
-                          .map((ref) => ({ ref: ref.name, localName: remoteLocalName(ref) }))
-                          .filter((entry) => !localNames.has(entry.localName)),
-                      };
-                    }),
+                  Effect.gen(function* () {
+                    yield* Effect.promise(() => fetchRepoRemotes(repo.rootPath));
+                    const res = yield* gitWorkflow.listRefs({ cwd: repo.rootPath });
+                    // Resolve the default ref directly (not from listRefs, whose
+                    // page is recency-sorted and can drop origin/main).
+                    const defaultBranchRef = yield* Effect.promise(() =>
+                      resolveDefaultRemoteRef(repo.rootPath),
+                    );
+                    const local = res.refs.filter((ref) => ref.isRemote !== true);
+                    const localNames = new Set(local.map((ref) => ref.name));
+                    const remoteLocalName = (ref: (typeof res.refs)[number]): string =>
+                      ref.remoteName && ref.name.startsWith(`${ref.remoteName}/`)
+                        ? ref.name.slice(ref.remoteName.length + 1)
+                        : ref.name;
+                    return {
+                      repoId: repo.id,
+                      currentBranch: local.find((ref) => ref.current)?.name ?? null,
+                      attachableBranches: local
+                        .filter((ref) => ref.worktreePath === null)
+                        .map((ref) => ref.name),
+                      // Remote refs whose local name has no local branch yet.
+                      // Require a "/" so the remote HEAD symref / bare remote
+                      // entries (e.g. "origin") are skipped.
+                      remoteBranches: res.refs
+                        .filter((ref) => ref.isRemote === true && ref.name.includes("/"))
+                        .map((ref) => ({ ref: ref.name, localName: remoteLocalName(ref) }))
+                        .filter((entry) => !localNames.has(entry.localName)),
+                      defaultBranchRef,
+                    };
+                  }).pipe(
                     Effect.catchIf(
                       (): boolean => true,
                       () =>
@@ -1160,6 +1170,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                           currentBranch: null,
                           attachableBranches: [] as ReadonlyArray<string>,
                           remoteBranches: [] as ReadonlyArray<{ ref: string; localName: string }>,
+                          defaultBranchRef: null as string | null,
                         }),
                     ),
                   ),
