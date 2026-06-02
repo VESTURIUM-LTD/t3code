@@ -70,16 +70,18 @@ export const createMultiRepoWorktrees = Effect.fn("createMultiRepoWorktrees")(fu
       continue;
     }
     // Per-repo branch decision:
-    //   "existing"   -> attach the named local branch into the worktree (no -b)
-    //   "remote"     -> create `branchName` tracking baseRef (git auto-tracks
-    //                   when branching from a remote ref like origin/x)
-    //   "new"/none   -> create `branchName` from baseBranch/HEAD (default)
+    //   "existing"        -> attach the named local branch into the worktree (no -b)
+    //   any ref + baseRef -> create `branchName` FROM baseRef. Covers "remote"
+    //                        (baseRef = origin/x → git auto-tracks) and "new" with
+    //                        an explicit base (the base selector's "default branch
+    //                        — latest" sets baseRef = origin/<default>).
+    //   "new"/none        -> create `branchName` from baseBranch/HEAD (default)
     const ref = refByRepoId.get(entry.repoId);
     const branchName = ref?.branch ?? input.branch;
     const createArgs =
       ref?.mode === "existing"
         ? { cwd: entry.sourceRootPath, refName: branchName, path: entry.worktreePath }
-        : ref?.mode === "remote" && ref.baseRef
+        : ref?.baseRef
           ? {
               cwd: entry.sourceRootPath,
               refName: ref.baseRef,

@@ -257,6 +257,10 @@ export const RepoBranchOptions = Schema.Struct({
   // Remote-only branches (no local counterpart) — selecting one creates a
   // local tracking branch from it.
   remoteBranches: Schema.Array(RepoRemoteBranch),
+  // The repo's default branch as a fresh remote ref (e.g. "origin/main"),
+  // resolved at discovery (after fetch). null when there's no resolvable remote
+  // default. Used by the dialog's "Default branch — latest" base option.
+  defaultBranchRef: Schema.NullOr(TrimmedNonEmptyString),
 });
 export type RepoBranchOptions = typeof RepoBranchOptions.Type;
 

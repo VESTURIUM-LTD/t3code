@@ -26,6 +26,39 @@ export async function fetchRepoRemotes(rootPath: string): Promise<void> {
   }
 }
 
+/**
+ * Resolve the repo's default branch as a remote-tracking ref (e.g. "origin/main")
+ * for the dialog's "new branch from latest default" base. Prefers the remote's
+ * own default (origin/HEAD), then falls back to origin/main → origin/master.
+ * Returns null when none resolve. Direct git (not listRefs) so pagination /
+ * recency sorting can't hide the default among many branches.
+ */
+export async function resolveDefaultRemoteRef(rootPath: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+      { cwd: rootPath, timeout: 5_000 },
+    );
+    const ref = stdout.trim();
+    if (ref) return ref; // e.g. "origin/main"
+  } catch {
+    // origin/HEAD not set — fall through to common defaults
+  }
+  for (const candidate of ["origin/main", "origin/master"]) {
+    try {
+      await execFileAsync("git", ["rev-parse", "--verify", "--quiet", `refs/remotes/${candidate}`], {
+        cwd: rootPath,
+        timeout: 5_000,
+      });
+      return candidate;
+    } catch {
+      // not present — try next
+    }
+  }
+  return null;
+}
+
 // Ported from ashvinnihalani/t3code (local-only; SSH-remote discovery dropped for prototype).
 
 function makeRepoId(projectId: string, relativePath: string): string {
