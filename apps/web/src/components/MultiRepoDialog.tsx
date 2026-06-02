@@ -128,7 +128,9 @@ export function MultiRepoDialog({
       } else if (value === "base:default") {
         const defaultRef = branchOptions.get(repoId)?.defaultBranchRef;
         if (defaultRef) {
-          next.set(repoId, { mode: "new", branch, baseRef: defaultRef });
+          // Branch name is resolved from the live session branch at create()
+          // time, not captured here (would go stale if the branch is edited).
+          next.set(repoId, { mode: "new", branch: "", baseRef: defaultRef });
         } else {
           next.delete(repoId); // no default ref → fall back to new-from-HEAD
         }
@@ -180,13 +182,17 @@ export function MultiRepoDialog({
     for (const repo of chosen) {
       const choice = repoBranch.get(repo.id);
       if (!choice) continue;
+      // A "new" branch (incl "from latest default") is always named after the
+      // CURRENT session branch — never the value captured when the option was
+      // picked, which goes stale if the session branch is edited afterwards.
+      // "existing"/"remote" keep their own branch name (local name / chosen name).
       repoRefs.push(
         choice.mode === "existing"
           ? { repoId: repo.id, mode: "existing", branch: choice.branch }
           : {
               repoId: repo.id,
               mode: choice.mode,
-              branch: choice.branch,
+              branch: choice.mode === "new" ? branch : choice.branch,
               ...(choice.baseRef ? { baseRef: choice.baseRef } : {}),
             },
       );
