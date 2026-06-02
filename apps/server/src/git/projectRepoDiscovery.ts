@@ -47,10 +47,14 @@ export async function resolveDefaultRemoteRef(rootPath: string): Promise<string 
   }
   for (const candidate of ["origin/main", "origin/master"]) {
     try {
-      await execFileAsync("git", ["rev-parse", "--verify", "--quiet", `refs/remotes/${candidate}`], {
-        cwd: rootPath,
-        timeout: 5_000,
-      });
+      await execFileAsync(
+        "git",
+        ["rev-parse", "--verify", "--quiet", `refs/remotes/${candidate}`],
+        {
+          cwd: rootPath,
+          timeout: 5_000,
+        },
+      );
       return candidate;
     } catch {
       // not present — try next

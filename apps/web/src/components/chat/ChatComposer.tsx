@@ -916,16 +916,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         projectSlashCommands.length > 0
           ? projectSlashCommands
           : (selectedProviderStatus?.slashCommands ?? [])
-      ).map(
-        (command) => ({
-          id: `provider-slash-command:${selectedProvider}:${command.name}`,
-          type: "provider-slash-command" as const,
-          provider: selectedProvider,
-          command,
-          label: `/${command.name}`,
-          description: command.description ?? command.input?.hint ?? "Run provider command",
-        }),
-      );
+      ).map((command) => ({
+        id: `provider-slash-command:${selectedProvider}:${command.name}`,
+        type: "provider-slash-command" as const,
+        provider: selectedProvider,
+        command,
+        label: `/${command.name}`,
+        description: command.description ?? command.input?.hint ?? "Run provider command",
+      }));
       const query = composerTrigger.query.trim().toLowerCase();
       const slashCommandItems = [...builtInSlashCommandItems, ...providerSlashCommandItems];
       if (!query) {

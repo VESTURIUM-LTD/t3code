@@ -94,8 +94,7 @@ export type DiscoverProjectSlashCommandsInput = typeof DiscoverProjectSlashComma
 export const DiscoverProjectSlashCommandsResult = Schema.Struct({
   slashCommands: Schema.Array(ServerProviderSlashCommand),
 });
-export type DiscoverProjectSlashCommandsResult =
-  typeof DiscoverProjectSlashCommandsResult.Type;
+export type DiscoverProjectSlashCommandsResult = typeof DiscoverProjectSlashCommandsResult.Type;
 
 export const ServerProviderSkill = Schema.Struct({
   name: TrimmedNonEmptyString,

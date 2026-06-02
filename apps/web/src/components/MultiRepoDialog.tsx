@@ -71,7 +71,12 @@ export function MultiRepoDialog({
     }
     setStatus("Discovering repositories…");
     try {
-      const result = await api.vcs.discoverProjectRepos({ projectId, workspaceRoot, threadId, branch });
+      const result = await api.vcs.discoverProjectRepos({
+        projectId,
+        workspaceRoot,
+        threadId,
+        branch,
+      });
       // Drop the workspace-root "." entry (the monorepo umbrella) when there are
       // nested sub-repos — those are what you actually want in a multi-repo session.
       const nested = result.repos.filter((repo) => repo.relativePath !== ".");
@@ -197,8 +202,9 @@ export function MultiRepoDialog({
             },
       );
     }
-    const attachCount = repoRefs.filter((ref) => ref.mode === "existing" || ref.mode === "remote")
-      .length;
+    const attachCount = repoRefs.filter(
+      (ref) => ref.mode === "existing" || ref.mode === "remote",
+    ).length;
     const baseLatestCount = repoRefs.filter((ref) => ref.mode === "new").length;
     setStatus(`Creating ${chosenSubs.length} worktree(s)…`);
     try {
@@ -260,153 +266,153 @@ export function MultiRepoDialog({
           branch / env-mode selectors). Opens upward — the trigger sits in the
           composer footer at the bottom of the viewport. */}
       <PopoverPopup side="top" align="start" className="w-96">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-medium">Multi-repo session</span>
-            <Button variant="ghost" size="sm" onClick={() => void discover()}>
-              Refresh
-            </Button>
-          </div>
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-sm font-medium">Multi-repo session</span>
+          <Button variant="ghost" size="sm" onClick={() => void discover()}>
+            Refresh
+          </Button>
+        </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="multi-repo-branch">Session branch</Label>
-            <Input
-              id="multi-repo-branch"
-              value={branch}
-              onChange={(event) => setBranch(event.target.value)}
-              className="font-mono text-xs"
-            />
-          </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="multi-repo-branch">Session branch</Label>
+          <Input
+            id="multi-repo-branch"
+            value={branch}
+            onChange={(event) => setBranch(event.target.value)}
+            className="font-mono text-xs"
+          />
+        </div>
 
-          {/* Current session info */}
-          <div className="mt-2 space-y-1 rounded-md border border-border bg-muted/40 px-2.5 py-2 text-xs">
-            <div className="flex items-baseline gap-2">
-              <span className="w-16 shrink-0 text-muted-foreground">In session</span>
-              <span className="text-foreground">
-                {inSessionSubCount > 0
-                  ? `project root + ${inSessionSubCount} repo${inSessionSubCount === 1 ? "" : "s"}`
-                  : "project root only (no repos added yet)"}
-              </span>
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="w-16 shrink-0 text-muted-foreground">Base</span>
-              <code
-                className="truncate font-mono text-muted-foreground"
-                title={sessionPath ?? undefined}
-              >
-                {sessionPath ?? "— not created yet —"}
-              </code>
-            </div>
+        {/* Current session info */}
+        <div className="mt-2 space-y-1 rounded-md border border-border bg-muted/40 px-2.5 py-2 text-xs">
+          <div className="flex items-baseline gap-2">
+            <span className="w-16 shrink-0 text-muted-foreground">In session</span>
+            <span className="text-foreground">
+              {inSessionSubCount > 0
+                ? `project root + ${inSessionSubCount} repo${inSessionSubCount === 1 ? "" : "s"}`
+                : "project root only (no repos added yet)"}
+            </span>
           </div>
+          <div className="flex items-baseline gap-2">
+            <span className="w-16 shrink-0 text-muted-foreground">Base</span>
+            <code
+              className="truncate font-mono text-muted-foreground"
+              title={sessionPath ?? undefined}
+            >
+              {sessionPath ?? "— not created yet —"}
+            </code>
+          </div>
+        </div>
 
-          <div className="mt-3 space-y-1.5">
-            <Label>Repositories</Label>
-            {rootRepo ? (
-              <p className="rounded bg-muted/50 px-2 py-1 text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">Project root</span> is always the
-                session base — your skills, CLAUDE.md &amp; MCP config load automatically.
-              </p>
-            ) : null}
-            {repos.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No repositories discovered yet.</p>
-            ) : (
-              <div className="max-h-56 space-y-1.5 overflow-y-auto">
-                {repos.map((repo) => {
-                  const options = branchOptions.get(repo.id);
-                  const attachable = options?.attachableBranches ?? [];
-                  const remotes = options?.remoteBranches ?? [];
-                  const defaultRef = options?.defaultBranchRef ?? null;
-                  const defaultName = defaultRef ? defaultRef.replace(/^[^/]+\//, "") : null;
-                  const isSelected = selected.has(repo.id);
-                  return (
-                    <div key={repo.id} className="space-y-1">
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggle(repo.id)}
-                        />
-                        <span className="truncate font-medium">{repo.displayName}</span>
-                        {repo.relativePath !== repo.displayName ? (
-                          <span className="truncate text-xs text-muted-foreground">
-                            {repo.relativePath}
-                          </span>
-                        ) : null}
-                        {inSession.has(repo.id) ? (
-                          <span className="ml-auto shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                            in session
-                          </span>
-                        ) : null}
-                      </label>
-                      {/* Per-repo branch base: new from current checkout (HEAD),
+        <div className="mt-3 space-y-1.5">
+          <Label>Repositories</Label>
+          {rootRepo ? (
+            <p className="rounded bg-muted/50 px-2 py-1 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Project root</span> is always the
+              session base — your skills, CLAUDE.md &amp; MCP config load automatically.
+            </p>
+          ) : null}
+          {repos.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No repositories discovered yet.</p>
+          ) : (
+            <div className="max-h-56 space-y-1.5 overflow-y-auto">
+              {repos.map((repo) => {
+                const options = branchOptions.get(repo.id);
+                const attachable = options?.attachableBranches ?? [];
+                const remotes = options?.remoteBranches ?? [];
+                const defaultRef = options?.defaultBranchRef ?? null;
+                const defaultName = defaultRef ? defaultRef.replace(/^[^/]+\//, "") : null;
+                const isSelected = selected.has(repo.id);
+                return (
+                  <div key={repo.id} className="space-y-1">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggle(repo.id)}
+                      />
+                      <span className="truncate font-medium">{repo.displayName}</span>
+                      {repo.relativePath !== repo.displayName ? (
+                        <span className="truncate text-xs text-muted-foreground">
+                          {repo.relativePath}
+                        </span>
+                      ) : null}
+                      {inSession.has(repo.id) ? (
+                        <span className="ml-auto shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          in session
+                        </span>
+                      ) : null}
+                    </label>
+                    {/* Per-repo branch base: new from current checkout (HEAD),
                           new from the repo's latest default (origin/<default>),
                           attach an existing local branch, or track a remote one. */}
-                      {isSelected && (attachable.length > 0 || remotes.length > 0 || defaultRef) ? (
-                        <div className="ml-6 flex items-center gap-1.5">
-                          <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                            base
-                          </span>
-                          <select
-                            value={branchSelectValue(repo.id)}
-                            onChange={(event) => setBranchChoice(repo.id, event.target.value)}
-                            className="min-w-0 flex-1 rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs"
-                          >
-                            <option value="">New branch — from current checkout</option>
-                            {defaultRef ? (
-                              <option value="base:default">
-                                New branch — from latest {defaultName}
-                              </option>
-                            ) : null}
-                            {attachable.length > 0 ? (
-                              <optgroup label="Attach local branch">
-                                {attachable.map((name) => (
-                                  <option key={name} value={name}>
-                                    {name}
-                                  </option>
-                                ))}
-                              </optgroup>
-                            ) : null}
-                            {remotes.length > 0 ? (
-                              <optgroup label="Track remote (creates local branch)">
-                                {remotes.map((rb) => (
-                                  <option key={rb.ref} value={`remote:${rb.ref}`}>
-                                    {rb.ref}
-                                  </option>
-                                ))}
-                              </optgroup>
-                            ) : null}
-                          </select>
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {created.length > 0 ? (
-            <div className="mt-3 space-y-1">
-              <Label>Created worktrees</Label>
-              <div className="space-y-0.5 text-xs text-muted-foreground">
-                {created.map((worktree) => (
-                  <div key={worktree.worktreePath}>
-                    {worktree.repoRelativePath} → {worktree.worktreePath}
+                    {isSelected && (attachable.length > 0 || remotes.length > 0 || defaultRef) ? (
+                      <div className="ml-6 flex items-center gap-1.5">
+                        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          base
+                        </span>
+                        <select
+                          value={branchSelectValue(repo.id)}
+                          onChange={(event) => setBranchChoice(repo.id, event.target.value)}
+                          className="min-w-0 flex-1 rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs"
+                        >
+                          <option value="">New branch — from current checkout</option>
+                          {defaultRef ? (
+                            <option value="base:default">
+                              New branch — from latest {defaultName}
+                            </option>
+                          ) : null}
+                          {attachable.length > 0 ? (
+                            <optgroup label="Attach local branch">
+                              {attachable.map((name) => (
+                                <option key={name} value={name}>
+                                  {name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ) : null}
+                          {remotes.length > 0 ? (
+                            <optgroup label="Track remote (creates local branch)">
+                              {remotes.map((rb) => (
+                                <option key={rb.ref} value={`remote:${rb.ref}`}>
+                                  {rb.ref}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ) : null}
+                        </select>
+                      </div>
+                    ) : null}
                   </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
-          ) : null}
+          )}
+        </div>
 
-          {status ? <p className="mt-3 text-xs text-muted-foreground">{status}</p> : null}
-
-          <div className="mt-3 flex justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
-              Close
-            </Button>
-            <Button size="sm" onClick={() => void create()}>
-              {inSession.size > 0 ? "Update session" : "Create worktrees"}
-            </Button>
+        {created.length > 0 ? (
+          <div className="mt-3 space-y-1">
+            <Label>Created worktrees</Label>
+            <div className="space-y-0.5 text-xs text-muted-foreground">
+              {created.map((worktree) => (
+                <div key={worktree.worktreePath}>
+                  {worktree.repoRelativePath} → {worktree.worktreePath}
+                </div>
+              ))}
+            </div>
           </div>
+        ) : null}
+
+        {status ? <p className="mt-3 text-xs text-muted-foreground">{status}</p> : null}
+
+        <div className="mt-3 flex justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
+            Close
+          </Button>
+          <Button size="sm" onClick={() => void create()}>
+            {inSession.size > 0 ? "Update session" : "Create worktrees"}
+          </Button>
+        </div>
       </PopoverPopup>
     </Popover>
   );

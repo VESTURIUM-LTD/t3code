@@ -4,7 +4,11 @@ import { existsSync } from "node:fs";
 
 import * as Effect from "effect/Effect";
 
-import type { ProjectGitRepo, ProjectRepoWorktree, ThreadMultiRepoWorktree } from "@t3tools/contracts";
+import type {
+  ProjectGitRepo,
+  ProjectRepoWorktree,
+  ThreadMultiRepoWorktree,
+} from "@t3tools/contracts";
 
 import { ServerConfig } from "../config.ts";
 import { GitWorkflowService } from "./GitWorkflowService.ts";
@@ -94,42 +98,39 @@ export const createMultiRepoWorktrees = Effect.fn("createMultiRepoWorktrees")(fu
               newRefName: branchName,
               path: entry.worktreePath,
             };
-    const result = yield* gitWorkflow
-      .createWorktree(createArgs)
-      .pipe(
-        // Recover from two failure modes (both for "new" collisions and for
-        // "existing" branches whose prior worktree dir was removed):
-        //   "a branch named '<b>' already exists"        — branch lingers, free
-        //   "'<b>' is already used by worktree at <path>" — stale registration
-        // `git worktree prune` clears the stale registration; afterwards the
-        // branch is free, so we attach it (refName only, no -b). If the branch
-        // is checked out in a LIVE worktree, this still fails — surfaced as a
-        // clear "already used by worktree" error.
-        Effect.catchIf(
-          (err) =>
-            err.detail.includes("already exists") ||
-            err.detail.includes("already used by worktree"),
-          () =>
-            Effect.sync(() => {
-              try {
-                execFileSync("git", ["worktree", "prune"], {
-                  cwd: entry.sourceRootPath,
-                  stdio: "ignore",
-                });
-              } catch {
-                // best-effort: prune failure shouldn't mask the attach attempt
-              }
-            }).pipe(
-              Effect.andThen(() =>
-                gitWorkflow.createWorktree({
-                  cwd: entry.sourceRootPath,
-                  refName: branchName,
-                  path: entry.worktreePath,
-                }),
-              ),
+    const result = yield* gitWorkflow.createWorktree(createArgs).pipe(
+      // Recover from two failure modes (both for "new" collisions and for
+      // "existing" branches whose prior worktree dir was removed):
+      //   "a branch named '<b>' already exists"        — branch lingers, free
+      //   "'<b>' is already used by worktree at <path>" — stale registration
+      // `git worktree prune` clears the stale registration; afterwards the
+      // branch is free, so we attach it (refName only, no -b). If the branch
+      // is checked out in a LIVE worktree, this still fails — surfaced as a
+      // clear "already used by worktree" error.
+      Effect.catchIf(
+        (err) =>
+          err.detail.includes("already exists") || err.detail.includes("already used by worktree"),
+        () =>
+          Effect.sync(() => {
+            try {
+              execFileSync("git", ["worktree", "prune"], {
+                cwd: entry.sourceRootPath,
+                stdio: "ignore",
+              });
+            } catch {
+              // best-effort: prune failure shouldn't mask the attach attempt
+            }
+          }).pipe(
+            Effect.andThen(() =>
+              gitWorkflow.createWorktree({
+                cwd: entry.sourceRootPath,
+                refName: branchName,
+                path: entry.worktreePath,
+              }),
             ),
-        ),
-      );
+          ),
+      ),
+    );
     created.push({
       repoId: entry.repoId,
       repoRelativePath: entry.repoRelativePath,
