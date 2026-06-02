@@ -10,7 +10,9 @@ jobs:
   quality:
     name: Format, Lint, Typecheck, Test, Browser Test, Build
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # GitHub-hosted runners are slower than the Blacksmith 8-vcpu machines this
+    # was originally tuned for; 10 min cut off the browser-test/build steps.
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v6
