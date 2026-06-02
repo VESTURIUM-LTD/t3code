@@ -9,8 +9,10 @@ on:
 jobs:
   quality:
     name: Format, Lint, Typecheck, Test, Browser Test, Build
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    # GitHub-hosted runners are slower than the Blacksmith 8-vcpu machines this
+    # was originally tuned for; 10 min cut off the browser-test/build steps.
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -84,7 +86,7 @@ jobs:
 
   mobile_native_static_analysis:
     name: Mobile Native Static Analysis
-    runs-on: blacksmith-12vcpu-macos-26
+    runs-on: macos-latest
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -111,7 +113,7 @@ jobs:
 
   release_smoke:
     name: Release Smoke
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout

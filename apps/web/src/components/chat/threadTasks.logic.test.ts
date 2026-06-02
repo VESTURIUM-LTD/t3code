@@ -67,7 +67,11 @@ describe("deriveLiveTasks", () => {
 
   it("shows a completed task even if its start wasn't seen (truncated history)", () => {
     const tasks = deriveLiveTasks([
-      act("task.completed", { taskId: "orphan", status: "completed" }, { summary: "Task completed" }),
+      act(
+        "task.completed",
+        { taskId: "orphan", status: "completed" },
+        { summary: "Task completed" },
+      ),
     ]);
     expect(tasks).toHaveLength(1);
     expect(tasks[0]?.status).toBe("completed");

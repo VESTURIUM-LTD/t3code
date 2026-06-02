@@ -109,9 +109,7 @@ export interface WsRpcClient {
     readonly discoverProjectSlashCommands: RpcUnaryMethod<
       typeof WS_METHODS.vcsDiscoverProjectSlashCommands
     >;
-    readonly createMultiRepoWorktree: RpcUnaryMethod<
-      typeof WS_METHODS.vcsCreateMultiRepoWorktree
-    >;
+    readonly createMultiRepoWorktree: RpcUnaryMethod<typeof WS_METHODS.vcsCreateMultiRepoWorktree>;
     readonly removeWorktree: RpcUnaryMethod<typeof WS_METHODS.vcsRemoveWorktree>;
     readonly createRef: RpcUnaryMethod<typeof WS_METHODS.vcsCreateRef>;
     readonly switchRef: RpcUnaryMethod<typeof WS_METHODS.vcsSwitchRef>;

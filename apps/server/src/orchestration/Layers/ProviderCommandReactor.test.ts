@@ -94,6 +94,7 @@ describe("ProviderCommandReactor", () => {
   let scope: Scope.Closeable | null = null;
   const createdStateDirs = new Set<string>();
   const createdBaseDirs = new Set<string>();
+  const createdWorktreeDirs = new Set<string>();
 
   afterEach(async () => {
     if (scope) {
@@ -112,6 +113,10 @@ describe("ProviderCommandReactor", () => {
       fs.rmSync(baseDir, { recursive: true, force: true });
     }
     createdBaseDirs.clear();
+    for (const worktreeDir of createdWorktreeDirs) {
+      fs.rmSync(worktreeDir, { recursive: true, force: true });
+    }
+    createdWorktreeDirs.clear();
   });
 
   describe("provider error attribution", () => {
@@ -1043,6 +1048,10 @@ describe("ProviderCommandReactor", () => {
       },
     });
     const now = "2026-01-01T00:00:00.000Z";
+    // The workspace cwd resolver (resolveThreadWorkspaceCwd) only honors a
+    // worktreePath whose directory exists on disk; a real worktree always does.
+    const worktreeCwd = fs.mkdtempSync(path.join(os.tmpdir(), "t3code-reactor-worktree-"));
+    createdWorktreeDirs.add(worktreeCwd);
 
     await Effect.runPromise(
       harness.engine.dispatch({
@@ -1072,7 +1081,7 @@ describe("ProviderCommandReactor", () => {
         type: "thread.meta.update",
         commandId: CommandId.make("cmd-thread-worktree-change"),
         threadId: ThreadId.make("thread-1"),
-        worktreePath: "/tmp/provider-project-worktree",
+        worktreePath: worktreeCwd,
       }),
     );
 
@@ -1098,7 +1107,7 @@ describe("ProviderCommandReactor", () => {
     expect(harness.stopSession.mock.calls.length).toBe(0);
     expect(harness.startSession.mock.calls[1]?.[1]).toMatchObject({
       threadId: ThreadId.make("thread-1"),
-      cwd: "/tmp/provider-project-worktree",
+      cwd: worktreeCwd,
       resumeCursor: { opaque: "resume-1" },
       modelSelection: {
         instanceId: ProviderInstanceId.make("claudeAgent"),
