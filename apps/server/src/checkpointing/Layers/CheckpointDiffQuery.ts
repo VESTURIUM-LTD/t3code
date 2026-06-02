@@ -99,6 +99,24 @@ const make = Effect.gen(function* () {
         });
       }
 
+      // Multi-repo sessions: only the root worktree is checkpointed per turn, so
+      // a true per-turn slice can't cover sub-repos. Show the aggregated cross-repo
+      // diff (since each branch forked) instead, so sub-repo work is never hidden.
+      // Returns null for single-repo threads → fall through to the checkpoint diff.
+      const multiRepoDiff = yield* Effect.promise(() =>
+        aggregatedMultiRepoWorkingTreeDiff(workspaceCwd),
+      ).pipe(Effect.withSpan("checkpoint.turnDiff.multiRepoWorkingTreeDiff"));
+      if (multiRepoDiff !== null) {
+        const aggregated = buildTurnDiffResult(input, multiRepoDiff);
+        if (!isTurnDiffResult(aggregated)) {
+          return yield* new CheckpointInvariantError({
+            operation,
+            detail: "Computed multi-repo turn diff result does not satisfy contract schema.",
+          });
+        }
+        return aggregated;
+      }
+
       const fromCheckpointRef =
         input.fromTurnCount === 0
           ? checkpointRefForThreadTurn(input.threadId, 0)
